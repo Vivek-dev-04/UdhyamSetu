@@ -1,0 +1,12 @@
+target/
+*.class
+*.log
+.idea/
+*.iml
+.vscode/
+.DS_Store
+# SQLite database files created during tests or dev
+*.db
+*.db-wal
+*.db-shm
+data/
