@@ -143,6 +143,32 @@ public class ExpenseRepository {
         return getExpensesByDateRange(conn, date, date);
     }
 
+    public long getTotalExpensesInPeriod(Connection conn, LocalDate from, LocalDate to) throws SQLException {
+        Objects.requireNonNull(conn, "Connection cannot be null");
+        StringBuilder sql = new StringBuilder("SELECT COALESCE(SUM(amount_paise), 0) FROM expenses WHERE 1=1 ");
+        List<String> params = new ArrayList<>();
+        if (from != null) {
+            sql.append("AND expense_date >= ? ");
+            params.add(from.toString());
+        }
+        if (to != null) {
+            sql.append("AND expense_date <= ? ");
+            params.add(to.toString());
+        }
+
+        try (PreparedStatement ps = conn.prepareStatement(sql.toString())) {
+            for (int i = 0; i < params.size(); i++) {
+                ps.setString(i + 1, params.get(i));
+            }
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getLong(1);
+                }
+            }
+        }
+        return 0L;
+    }
+
     public long getTotalCashExpensesForDate(Connection conn, LocalDate date) throws SQLException {
         Objects.requireNonNull(conn, "Connection cannot be null");
         Objects.requireNonNull(date, "Date cannot be null");
