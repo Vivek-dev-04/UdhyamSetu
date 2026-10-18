@@ -70,6 +70,8 @@ public class AppContext {
     private final ThermalPrinterService thermalPrinterService;
     private final ScheduledBackupService scheduledBackupService;
     private final ShopSettingsService shopSettingsService;
+    private final ConvertRegisteredSaleService convertRegisteredSaleService;
+    private final LowStockService lowStockService;
 
     private User currentUser;
 
@@ -187,9 +189,6 @@ public class AppContext {
         );
 
         this.expenseService = new ExpenseService(transactionHelper, expenseRepository, clock);
-        this.dayEndClosingService = new DayEndClosingService(transactionHelper, dayEndClosingRepository, expenseRepository, clock);
-        this.reportService = new ReportService(transactionHelper, reportRepository, clock);
-        this.profitService = new ProfitService(transactionHelper, profitRepository, expenseRepository, clock);
 
         this.backupService = new BackupService(
                 connectionFactory,
@@ -202,6 +201,10 @@ public class AppContext {
                 dataDirHandler.getDatabasePath(),
                 clock
         );
+
+        this.dayEndClosingService = new DayEndClosingService(transactionHelper, dayEndClosingRepository, expenseRepository, backupService, clock);
+        this.reportService = new ReportService(transactionHelper, reportRepository, clock);
+        this.profitService = new ProfitService(transactionHelper, profitRepository, expenseRepository, clock);
 
         Path logDir = dataDirHandler.getDataDirectory().getParent() != null
                 ? dataDirHandler.getDataDirectory().getParent().resolve("logs")
@@ -245,6 +248,21 @@ public class AppContext {
                 userRepository,
                 auditLogService
         );
+
+        this.convertRegisteredSaleService = new ConvertRegisteredSaleService(
+                transactionHelper,
+                saleRepository,
+                paymentRepository,
+                billCounterService,
+                userRepository,
+                auditLogService,
+                clock
+        );
+
+        this.lowStockService = new LowStockService(
+                transactionHelper,
+                stockRepository
+        );
     }
 
     public ConnectionFactory getConnectionFactory() { return connectionFactory; }
@@ -273,6 +291,8 @@ public class AppContext {
     public ThermalPrinterService getThermalPrinterService() { return thermalPrinterService; }
     public ScheduledBackupService getScheduledBackupService() { return scheduledBackupService; }
     public ShopSettingsService getShopSettingsService() { return shopSettingsService; }
+    public ConvertRegisteredSaleService getConvertRegisteredSaleService() { return convertRegisteredSaleService; }
+    public LowStockService getLowStockService() { return lowStockService; }
     public SettingsRepository getSettingsRepository() { return settingsRepository; }
 
     public User getCurrentUser() { return currentUser; }

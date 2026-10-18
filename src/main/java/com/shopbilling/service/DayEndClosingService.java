@@ -3,6 +3,7 @@ package com.shopbilling.service;
 import com.shopbilling.db.DayEndClosingRepository;
 import com.shopbilling.db.ExpenseRepository;
 import com.shopbilling.db.TransactionHelper;
+import com.shopbilling.model.BackupType;
 import com.shopbilling.model.DayEndCashSummary;
 import com.shopbilling.model.DayEndClosingRecord;
 import com.shopbilling.model.Money;
@@ -31,15 +32,25 @@ public class DayEndClosingService {
     private final TransactionHelper transactionHelper;
     private final DayEndClosingRepository dayEndClosingRepository;
     private final ExpenseRepository expenseRepository;
+    private final BackupService backupService;
     private final IstClock clock;
 
     public DayEndClosingService(TransactionHelper transactionHelper,
                                 DayEndClosingRepository dayEndClosingRepository,
                                 ExpenseRepository expenseRepository,
                                 IstClock clock) {
+        this(transactionHelper, dayEndClosingRepository, expenseRepository, null, clock);
+    }
+
+    public DayEndClosingService(TransactionHelper transactionHelper,
+                                DayEndClosingRepository dayEndClosingRepository,
+                                ExpenseRepository expenseRepository,
+                                BackupService backupService,
+                                IstClock clock) {
         this.transactionHelper = Objects.requireNonNull(transactionHelper, "TransactionHelper cannot be null");
         this.dayEndClosingRepository = Objects.requireNonNull(dayEndClosingRepository, "DayEndClosingRepository cannot be null");
         this.expenseRepository = Objects.requireNonNull(expenseRepository, "ExpenseRepository cannot be null");
+        this.backupService = backupService;
         this.clock = Objects.requireNonNull(clock, "IstClock cannot be null");
     }
 
@@ -72,7 +83,7 @@ public class DayEndClosingService {
 
         final LocalDate effectiveDate = date != null ? date : clock.today();
 
-        return transactionHelper.execute(conn -> {
+        DayEndClosingRecord closingRecord = transactionHelper.execute(conn -> {
             // 1. Verify user exists and check OWNER permission
             String role = getUserRole(conn, userId);
             if (!"OWNER".equalsIgnoreCase(role)) {
@@ -113,6 +124,18 @@ public class DayEndClosingService {
 
             return saved;
         });
+
+        // Trigger automatic backup upon closing day (PRD Section 7.9, FR-40)
+        if (backupService != null) {
+            try {
+                logger.info("FR-40: Triggering automated day-end backup for closed date: {}", effectiveDate);
+                backupService.performBackup(BackupType.DAY_END, null);
+            } catch (Exception ex) {
+                logger.error("Failed to perform automated day-end backup: {}", ex.getMessage(), ex);
+            }
+        }
+
+        return closingRecord;
     }
 
     public Optional<DayEndClosingRecord> getClosingForDate(LocalDate date) {
