@@ -65,6 +65,9 @@ class AppContextTest {
         assertNotNull(context.getBarcodeLabelService());
         assertNotNull(context.getGstReportService());
         assertNotNull(context.getDatabaseMaintenanceService());
+        assertNotNull(context.getWarrantyTrackingService());
+        assertNotNull(context.getCategoryBrandAnalyticsService());
+        assertNotNull(context.getAuditAnomalyService());
 
         // Initial user state
         assertNull(context.getCurrentUser());

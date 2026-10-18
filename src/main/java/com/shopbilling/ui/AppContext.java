@@ -48,6 +48,7 @@ public class AppContext {
     private final ProfitRepository profitRepository;
     private final BackupRepository backupRepository;
     private final SettingsRepository settingsRepository;
+    private final WarrantyRepository warrantyRepository;
 
     // Services
     private final AuditLogService auditLogService;
@@ -88,6 +89,9 @@ public class AppContext {
     private final BarcodeLabelService barcodeLabelService;
     private final GstReportService gstReportService;
     private final DatabaseMaintenanceService databaseMaintenanceService;
+    private final WarrantyTrackingService warrantyTrackingService;
+    private final CategoryBrandAnalyticsService categoryBrandAnalyticsService;
+    private final AuditAnomalyService auditAnomalyService;
 
     private User currentUser;
 
@@ -129,6 +133,7 @@ public class AppContext {
         this.profitRepository = new ProfitRepository();
         this.backupRepository = new BackupRepository();
         this.settingsRepository = new SettingsRepository();
+        this.warrantyRepository = new WarrantyRepository();
 
         // Initialize services
         this.auditLogService = new AuditLogService(transactionHelper, auditLogRepository, userRepository);
@@ -374,6 +379,25 @@ public class AppContext {
                 connectionFactory,
                 dataDirHandler.getDatabasePath()
         );
+
+        this.warrantyTrackingService = new WarrantyTrackingService(
+                transactionHelper,
+                warrantyRepository,
+                saleRepository,
+                productVariantRepository,
+                clock
+        );
+
+        this.categoryBrandAnalyticsService = new CategoryBrandAnalyticsService(
+                transactionHelper,
+                clock
+        );
+
+        this.auditAnomalyService = new AuditAnomalyService(
+                transactionHelper,
+                settingsRepository,
+                clock
+        );
     }
 
     public ConnectionFactory getConnectionFactory() { return connectionFactory; }
@@ -416,6 +440,9 @@ public class AppContext {
     public BarcodeLabelService getBarcodeLabelService() { return barcodeLabelService; }
     public GstReportService getGstReportService() { return gstReportService; }
     public DatabaseMaintenanceService getDatabaseMaintenanceService() { return databaseMaintenanceService; }
+    public WarrantyTrackingService getWarrantyTrackingService() { return warrantyTrackingService; }
+    public CategoryBrandAnalyticsService getCategoryBrandAnalyticsService() { return categoryBrandAnalyticsService; }
+    public AuditAnomalyService getAuditAnomalyService() { return auditAnomalyService; }
     public SettingsRepository getSettingsRepository() { return settingsRepository; }
 
     public User getCurrentUser() { return currentUser; }
