@@ -75,6 +75,10 @@ public class CreditLedgerScreen {
         HBox actionRow = new HBox(15);
         actionRow.setAlignment(Pos.CENTER_LEFT);
 
+        Button addCustBtn = new Button("+ Add New Customer");
+        addCustBtn.setStyle("-fx-background-color: #f1f5f9; -fx-border-color: #cbd5e1; -fx-border-radius: 4; -fx-font-weight: bold;");
+        addCustBtn.setOnAction(e -> handleAddNewCustomer());
+
         Button payBtn = new Button("Record Customer Payment");
         payBtn.setStyle("-fx-background-color: #16a34a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 4;");
         payBtn.setOnAction(e -> handleRecordCustomerPayment());
@@ -83,7 +87,7 @@ public class CreditLedgerScreen {
         statementBtn.setStyle("-fx-background-color: #0284c7; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 4;");
         statementBtn.setOnAction(e -> handleViewCustomerStatement());
 
-        actionRow.getChildren().addAll(payBtn, statementBtn);
+        actionRow.getChildren().addAll(addCustBtn, payBtn, statementBtn);
 
         setupCustomerTable();
         VBox.setVgrow(customerTable, Priority.ALWAYS);
@@ -140,6 +144,10 @@ public class CreditLedgerScreen {
         HBox actionRow = new HBox(15);
         actionRow.setAlignment(Pos.CENTER_LEFT);
 
+        Button addSuppBtn = new Button("+ Add New Supplier");
+        addSuppBtn.setStyle("-fx-background-color: #f1f5f9; -fx-border-color: #cbd5e1; -fx-border-radius: 4; -fx-font-weight: bold;");
+        addSuppBtn.setOnAction(e -> handleAddNewSupplier());
+
         Button paySuppBtn = new Button("Record Payment Made to Supplier");
         paySuppBtn.setStyle("-fx-background-color: #16a34a; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 4;");
         paySuppBtn.setOnAction(e -> handleRecordSupplierPayment());
@@ -148,7 +156,7 @@ public class CreditLedgerScreen {
         suppStmtBtn.setStyle("-fx-background-color: #0284c7; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 4;");
         suppStmtBtn.setOnAction(e -> handleViewSupplierStatement());
 
-        actionRow.getChildren().addAll(paySuppBtn, suppStmtBtn);
+        actionRow.getChildren().addAll(addSuppBtn, paySuppBtn, suppStmtBtn);
 
         setupSupplierTable();
         VBox.setVgrow(supplierTable, Priority.ALWAYS);
@@ -385,6 +393,137 @@ public class CreditLedgerScreen {
 
         content.getChildren().addAll(header, agingLabel, entryTable);
         dialog.getDialogPane().setContent(content);
+        dialog.showAndWait();
+    }
+
+    private void handleAddNewCustomer() {
+        Dialog<Customer> dialog = new Dialog<>();
+        dialog.setTitle("Add New Customer");
+        dialog.setHeaderText("Register Retail Customer or Technician");
+
+        ButtonType saveBtnType = new ButtonType("Save Customer", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(saveBtnType, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20));
+
+        TextField nameField = new TextField();
+        TextField phoneField = new TextField();
+        ComboBox<CustomerType> typeCombo = new ComboBox<>(FXCollections.observableArrayList(CustomerType.RETAIL, CustomerType.TECHNICIAN));
+        typeCombo.setValue(CustomerType.RETAIL);
+        TextField limitField = new TextField();
+        limitField.setPromptText("Optional credit limit (Rs)");
+
+        grid.add(new Label("Customer Name *:"), 0, 0);
+        grid.add(nameField, 1, 0);
+        grid.add(new Label("Phone:"), 0, 1);
+        grid.add(phoneField, 1, 1);
+        grid.add(new Label("Customer Type:"), 0, 2);
+        grid.add(typeCombo, 1, 2);
+        grid.add(new Label("Credit Limit (Rs):"), 0, 3);
+        grid.add(limitField, 1, 3);
+
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(btn -> {
+            if (btn == saveBtnType) {
+                String name = nameField.getText().trim();
+                if (name.isEmpty()) {
+                    new Alert(Alert.AlertType.ERROR, "Customer name cannot be empty.", ButtonType.OK).showAndWait();
+                    return null;
+                }
+                try {
+                    Money limit = limitField.getText().trim().isEmpty() ? null : Money.parse(limitField.getText().trim());
+                    Customer c = context.getCustomerSupplierService().createCustomer(
+                            name,
+                            phoneField.getText().trim(),
+                            typeCombo.getValue(),
+                            null,
+                            limit,
+                            null
+                    );
+                    loadCustomerData();
+                    return c;
+                } catch (Exception ex) {
+                    new Alert(Alert.AlertType.ERROR, "Failed to create customer: " + ex.getMessage(), ButtonType.OK).showAndWait();
+                    return null;
+                }
+            }
+            return null;
+        });
+
+        dialog.showAndWait();
+    }
+
+    private void handleAddNewSupplier() {
+        Dialog<Supplier> dialog = new Dialog<>();
+        dialog.setTitle("Add New Supplier (Distributor)");
+        dialog.setHeaderText("Register Distributor / Wholesale Supplier");
+
+        ButtonType saveBtnType = new ButtonType("Save Supplier", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(saveBtnType, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(10);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(20));
+
+        TextField nameField = new TextField();
+        nameField.setPromptText("e.g. Havells Agencies / Sharma Electricals");
+        TextField phoneField = new TextField();
+        phoneField.setPromptText("e.g. 9876543210");
+        TextField contactPersonField = new TextField();
+        contactPersonField.setPromptText("e.g. Rajesh Kumar");
+        TextField addressField = new TextField();
+        addressField.setPromptText("e.g. MI Road, Jaipur");
+        TextField gstinField = new TextField();
+        gstinField.setPromptText("15-digit GSTIN (optional)");
+        TextField notesField = new TextField();
+        notesField.setPromptText("Optional notes");
+
+        grid.add(new Label("Supplier Name *:"), 0, 0);
+        grid.add(nameField, 1, 0);
+        grid.add(new Label("Phone:"), 0, 1);
+        grid.add(phoneField, 1, 1);
+        grid.add(new Label("Contact Person:"), 0, 2);
+        grid.add(contactPersonField, 1, 2);
+        grid.add(new Label("Address:"), 0, 3);
+        grid.add(addressField, 1, 3);
+        grid.add(new Label("GSTIN:"), 0, 4);
+        grid.add(gstinField, 1, 4);
+        grid.add(new Label("Notes:"), 0, 5);
+        grid.add(notesField, 1, 5);
+
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(btn -> {
+            if (btn == saveBtnType) {
+                String name = nameField.getText().trim();
+                if (name.isEmpty()) {
+                    new Alert(Alert.AlertType.ERROR, "Supplier name cannot be empty.", ButtonType.OK);
+                    return null;
+                }
+                try {
+                    Supplier s = context.getCustomerSupplierService().createSupplier(
+                            name,
+                            phoneField.getText().trim(),
+                            contactPersonField.getText().trim(),
+                            addressField.getText().trim(),
+                            gstinField.getText().trim(),
+                            notesField.getText().trim()
+                    );
+                    loadSupplierData();
+                    return s;
+                } catch (Exception ex) {
+                    new Alert(Alert.AlertType.ERROR, "Failed to create supplier: " + ex.getMessage(), ButtonType.OK).showAndWait();
+                    return null;
+                }
+            }
+            return null;
+        });
+
         dialog.showAndWait();
     }
 }

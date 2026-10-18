@@ -166,10 +166,9 @@ public class CustomerLedgerRepository {
         String sql = "SELECT c.id, c.name, c.phone, c.customer_type, c.credit_limit_paise, " +
                 "COALESCE(SUM(e.amount_paise), 0) as current_dues_paise " +
                 "FROM customers c " +
-                "JOIN customer_ledger_entries e ON c.id = e.customer_id " +
+                "LEFT JOIN customer_ledger_entries e ON c.id = e.customer_id " +
                 "GROUP BY c.id " +
-                "HAVING current_dues_paise > 0 " +
-                "ORDER BY current_dues_paise DESC;";
+                "ORDER BY current_dues_paise DESC, c.name ASC;";
 
         java.util.List<com.shopbilling.model.CustomerDuesSummary> list = new java.util.ArrayList<>();
         try (PreparedStatement ps = conn.prepareStatement(sql);

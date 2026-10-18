@@ -99,10 +99,9 @@ public class SupplierLedgerRepository {
         String sql = "SELECT s.id, s.name, s.phone, s.contact_person, " +
                 "COALESCE(SUM(e.amount_paise), 0) as current_payable_paise " +
                 "FROM suppliers s " +
-                "JOIN supplier_ledger_entries e ON s.id = e.supplier_id " +
+                "LEFT JOIN supplier_ledger_entries e ON s.id = e.supplier_id " +
                 "GROUP BY s.id " +
-                "HAVING current_payable_paise > 0 " +
-                "ORDER BY current_payable_paise DESC;";
+                "ORDER BY current_payable_paise DESC, s.name ASC;";
 
         java.util.List<com.shopbilling.model.SupplierPayableSummary> list = new java.util.ArrayList<>();
         try (PreparedStatement ps = conn.prepareStatement(sql);

@@ -429,6 +429,16 @@ public class StockScreen {
         grid.setPadding(new Insets(20, 50, 10, 10));
 
         ComboBox<Supplier> supplierCombo = new ComboBox<>(FXCollections.observableArrayList(suppliers));
+        supplierCombo.setConverter(new javafx.util.StringConverter<>() {
+            @Override
+            public String toString(Supplier s) {
+                return s == null ? "" : s.name();
+            }
+            @Override
+            public Supplier fromString(String string) {
+                return null;
+            }
+        });
         supplierCombo.setCellFactory(p -> new ListCell<>() {
             @Override
             protected void updateItem(Supplier s, boolean empty) {
@@ -436,8 +446,9 @@ public class StockScreen {
                 setText(empty || s == null ? null : s.name());
             }
         });
-        supplierCombo.setButtonCell(supplierCombo.getCellFactory().call(null));
-        supplierCombo.setValue(suppliers.get(0));
+        if (!suppliers.isEmpty()) {
+            supplierCombo.setValue(suppliers.get(0));
+        }
 
         Button quickAddSuppBtn = new Button("+");
         quickAddSuppBtn.setTooltip(new Tooltip("Add New Supplier"));
@@ -456,6 +467,16 @@ public class StockScreen {
         invoiceNumField.setPromptText("e.g. INV-2026-999");
 
         ComboBox<StockRow> variantCombo = new ComboBox<>(FXCollections.observableArrayList(allRows));
+        variantCombo.setConverter(new javafx.util.StringConverter<>() {
+            @Override
+            public String toString(StockRow r) {
+                return r == null ? "" : r.productName() + " (" + r.variantName() + ") - " + r.brandName();
+            }
+            @Override
+            public StockRow fromString(String string) {
+                return null;
+            }
+        });
         variantCombo.setCellFactory(p -> new ListCell<>() {
             @Override
             protected void updateItem(StockRow r, boolean empty) {
@@ -463,8 +484,9 @@ public class StockScreen {
                 setText(empty || r == null ? null : r.productName() + " (" + r.variantName() + ") - " + r.brandName());
             }
         });
-        variantCombo.setButtonCell(variantCombo.getCellFactory().call(null));
-        if (!allRows.isEmpty()) variantCombo.setValue(allRows.get(0));
+        if (!allRows.isEmpty()) {
+            variantCombo.setValue(allRows.get(0));
+        }
 
         Button quickAddProdBtn = new Button("+");
         quickAddProdBtn.setTooltip(new Tooltip("Add New Product"));
