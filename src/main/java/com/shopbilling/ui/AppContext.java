@@ -3,6 +3,7 @@ package com.shopbilling.ui;
 import com.shopbilling.db.*;
 import com.shopbilling.model.User;
 import com.shopbilling.service.*;
+import com.shopbilling.service.pdf.BarcodeLabelService;
 import com.shopbilling.service.pdf.BillPdfService;
 import com.shopbilling.service.pdf.CreditNotePdfService;
 import com.shopbilling.service.pdf.CustomerStatementPdfService;
@@ -84,6 +85,9 @@ public class AppContext {
     private final CreditNotePdfService creditNotePdfService;
     private final DayEndReportService dayEndReportService;
     private final SupplierStatementPdfService supplierStatementPdfService;
+    private final BarcodeLabelService barcodeLabelService;
+    private final GstReportService gstReportService;
+    private final DatabaseMaintenanceService databaseMaintenanceService;
 
     private User currentUser;
 
@@ -351,6 +355,25 @@ public class AppContext {
                 settingsRepository,
                 clock
         );
+
+        this.barcodeLabelService = new BarcodeLabelService(
+                transactionHelper,
+                productVariantRepository,
+                productRepository,
+                brandRepository,
+                settingsRepository
+        );
+
+        this.gstReportService = new GstReportService(
+                transactionHelper,
+                settingsRepository,
+                clock
+        );
+
+        this.databaseMaintenanceService = new DatabaseMaintenanceService(
+                connectionFactory,
+                dataDirHandler.getDatabasePath()
+        );
     }
 
     public ConnectionFactory getConnectionFactory() { return connectionFactory; }
@@ -390,6 +413,9 @@ public class AppContext {
     public CreditNotePdfService getCreditNotePdfService() { return creditNotePdfService; }
     public DayEndReportService getDayEndReportService() { return dayEndReportService; }
     public SupplierStatementPdfService getSupplierStatementPdfService() { return supplierStatementPdfService; }
+    public BarcodeLabelService getBarcodeLabelService() { return barcodeLabelService; }
+    public GstReportService getGstReportService() { return gstReportService; }
+    public DatabaseMaintenanceService getDatabaseMaintenanceService() { return databaseMaintenanceService; }
     public SettingsRepository getSettingsRepository() { return settingsRepository; }
 
     public User getCurrentUser() { return currentUser; }

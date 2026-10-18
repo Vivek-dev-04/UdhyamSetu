@@ -62,6 +62,9 @@ class AppContextTest {
         assertNotNull(context.getCreditNotePdfService());
         assertNotNull(context.getDayEndReportService());
         assertNotNull(context.getSupplierStatementPdfService());
+        assertNotNull(context.getBarcodeLabelService());
+        assertNotNull(context.getGstReportService());
+        assertNotNull(context.getDatabaseMaintenanceService());
 
         // Initial user state
         assertNull(context.getCurrentUser());
