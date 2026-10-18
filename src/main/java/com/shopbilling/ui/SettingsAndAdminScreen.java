@@ -67,13 +67,15 @@ public class SettingsAndAdminScreen {
         Tab usersTab = new Tab("User Accounts", buildUsersTab());
         Tab auditTab = new Tab("Audit Trail (FR-44)", buildAuditTab());
         Tab backupTab = new Tab("Backups & Diagnostics", buildBackupTab());
+        Tab watchdogTab = new Tab("Fraud Watchdog & Anomalies (FR-44)", buildWatchdogTab());
 
         if (!context.isOwner()) {
             usersTab.setDisable(true);
             auditTab.setDisable(true);
+            watchdogTab.setDisable(true);
         }
 
-        tabPane.getTabs().addAll(settingsTab, usersTab, auditTab, backupTab);
+        tabPane.getTabs().addAll(settingsTab, usersTab, auditTab, backupTab, watchdogTab);
         root.setCenter(tabPane);
 
         return root;
@@ -99,6 +101,9 @@ public class SettingsAndAdminScreen {
         TextField backupRetentionField = new TextField();
         TextField backupFolderField = new TextField();
         backupFolderField.setPrefWidth(300);
+
+        ComboBox<AppLocale> languageCombo = new ComboBox<>(FXCollections.observableArrayList(AppLocale.ENGLISH, AppLocale.HINDI));
+        languageCombo.setValue(context.getI18nService().getCurrentLocale());
 
         ShopProfile current = context.getShopSettingsService().getShopProfile();
         shopNameField.setText(current.shopName());
@@ -141,6 +146,7 @@ public class SettingsAndAdminScreen {
                 );
 
                 context.getShopSettingsService().updateShopProfile(userId, updated);
+                context.getI18nService().setLocale(languageCombo.getValue(), userId);
                 new Alert(Alert.AlertType.INFORMATION, "Settings saved successfully!", ButtonType.OK).showAndWait();
             } catch (Exception ex) {
                 new Alert(Alert.AlertType.ERROR, "Failed to save settings: " + ex.getMessage(), ButtonType.OK).showAndWait();
@@ -165,7 +171,9 @@ public class SettingsAndAdminScreen {
         grid.add(backupRetentionField, 1, 7);
         grid.add(new Label("External Backup Directory:"), 0, 8);
         grid.add(backupFolderField, 1, 8);
-        grid.add(saveSettingsBtn, 1, 9);
+        grid.add(new Label("Language / भाषा:"), 0, 9);
+        grid.add(languageCombo, 1, 9);
+        grid.add(saveSettingsBtn, 1, 10);
 
         box.getChildren().addAll(grid);
         return box;
@@ -449,5 +457,130 @@ public class SettingsAndAdminScreen {
                 new Alert(Alert.AlertType.ERROR, "Export error: " + ex.getMessage(), ButtonType.OK).showAndWait();
             }
         }
+    }
+
+    private VBox buildWatchdogTab() {
+        VBox box = new VBox(15);
+        box.setPadding(new Insets(20));
+
+        // Date filter row
+        HBox filterRow = new HBox(15);
+        filterRow.setAlignment(Pos.CENTER_LEFT);
+
+        DatePicker fromPicker = new DatePicker(context.getClock().today().minusDays(30));
+        DatePicker toPicker = new DatePicker(context.getClock().today());
+
+        Button scanBtn = new Button("Run Anomaly Scan");
+        scanBtn.setStyle("-fx-background-color: #dc2626; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 4;");
+
+        filterRow.getChildren().addAll(
+                new Label("From:"), fromPicker,
+                new Label("To:"), toPicker,
+                scanBtn
+        );
+
+        // Metric badges ribbon
+        HBox metricsRibbon = new HBox(15);
+        Label totalBadge = new Label("0");
+        Label highBadge = new Label("0");
+        Label medBadge = new Label("0");
+        Label lowBadge = new Label("0");
+
+        metricsRibbon.getChildren().addAll(
+                createWatchdogCard("TOTAL ANOMALIES", totalBadge, "#1e293b"),
+                createWatchdogCard("HIGH SEVERITY", highBadge, "#dc2626"),
+                createWatchdogCard("MEDIUM SEVERITY", medBadge, "#ea580c"),
+                createWatchdogCard("LOW SEVERITY", lowBadge, "#d97706")
+        );
+
+        // Table
+        ObservableList<AuditAnomalyRecord> anomalyData = FXCollections.observableArrayList();
+        TableView<AuditAnomalyRecord> anomalyTable = new TableView<>(anomalyData);
+        VBox.setVgrow(anomalyTable, Priority.ALWAYS);
+
+        TableColumn<AuditAnomalyRecord, String> colTime = new TableColumn<>("Timestamp");
+        colTime.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().occurredAt()));
+        colTime.setPrefWidth(140);
+
+        TableColumn<AuditAnomalyRecord, String> colCat = new TableColumn<>("Category");
+        colCat.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().category().name()));
+        colCat.setPrefWidth(160);
+
+        TableColumn<AuditAnomalyRecord, String> colSev = new TableColumn<>("Severity");
+        colSev.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().severity().name()));
+        colSev.setPrefWidth(90);
+
+        TableColumn<AuditAnomalyRecord, String> colTitle = new TableColumn<>("Anomaly Title");
+        colTitle.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().title()));
+        colTitle.setPrefWidth(260);
+
+        TableColumn<AuditAnomalyRecord, String> colUser = new TableColumn<>("User");
+        colUser.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().username() != null ? c.getValue().username() : "-"));
+        colUser.setPrefWidth(100);
+
+        TableColumn<AuditAnomalyRecord, String> colAmount = new TableColumn<>("Financial Impact");
+        colAmount.setCellValueFactory(c -> new SimpleStringProperty(c.getValue().monetaryAmount() != null ? c.getValue().monetaryAmount().toFormattedString() : "-"));
+        colAmount.setPrefWidth(120);
+
+        anomalyTable.getColumns().addAll(List.of(colTime, colCat, colSev, colTitle, colUser, colAmount));
+
+        // Detail Inspector Card
+        VBox inspector = new VBox(6);
+        inspector.setPadding(new Insets(12, 16, 12, 16));
+        inspector.setStyle("-fx-background-color: #ffffff; -fx-border-color: #cbd5e1; -fx-border-radius: 6;");
+
+        Label inspectorHeader = new Label("Anomaly Details & Recommended Action");
+        inspectorHeader.setStyle("-fx-font-weight: bold; -fx-font-size: 13px; -fx-text-fill: #0f172a;");
+
+        Label detailLabel = new Label("Select an anomaly from the table above to view full forensic explanation.");
+        detailLabel.setWrapText(true);
+        detailLabel.setStyle("-fx-text-fill: #475569; -fx-font-size: 12px;");
+
+        inspector.getChildren().addAll(inspectorHeader, detailLabel);
+
+        anomalyTable.getSelectionModel().selectedItemProperty().addListener((obs, oldV, selected) -> {
+            if (selected != null) {
+                detailLabel.setText(String.format("Reference: %s\n\nExplanation:\n%s\n\nFinancial Impact: %s",
+                        selected.entityRef(), selected.description(),
+                        selected.monetaryAmount() != null ? selected.monetaryAmount().toFormattedString() : "None"));
+            } else {
+                detailLabel.setText("Select an anomaly from the table above to view full forensic explanation.");
+            }
+        });
+
+        Runnable scan = () -> {
+            try {
+                long userId = context.getCurrentUser() != null ? context.getCurrentUser().id() : 1L;
+                AuditAnomalyReport report = context.getAuditAnomalyService().scanAnomalies(fromPicker.getValue(), toPicker.getValue(), userId);
+                anomalyData.setAll(report.anomalies());
+
+                totalBadge.setText(String.valueOf(report.totalAnomalies()));
+                highBadge.setText(String.valueOf(report.highSeverityCount()));
+                medBadge.setText(String.valueOf(report.mediumSeverityCount()));
+                lowBadge.setText(String.valueOf(report.lowSeverityCount()));
+            } catch (Exception ex) {
+                new Alert(Alert.AlertType.ERROR, "Failed to scan anomalies: " + ex.getMessage(), ButtonType.OK).showAndWait();
+            }
+        };
+
+        scanBtn.setOnAction(e -> scan.run());
+
+        box.getChildren().addAll(filterRow, metricsRibbon, anomalyTable, inspector);
+        return box;
+    }
+
+    private VBox createWatchdogCard(String title, Label valLabel, String color) {
+        VBox card = new VBox(4);
+        card.setPadding(new Insets(10, 16, 10, 16));
+        card.setPrefWidth(200);
+        card.setStyle("-fx-background-color: #ffffff; -fx-border-color: #e2e8f0; -fx-border-radius: 6;");
+
+        Label t = new Label(title);
+        t.setStyle("-fx-font-size: 10px; -fx-font-weight: bold; -fx-text-fill: #64748b;");
+
+        valLabel.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: " + color + ";");
+
+        card.getChildren().addAll(t, valLabel);
+        return card;
     }
 }
