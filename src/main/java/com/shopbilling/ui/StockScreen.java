@@ -370,7 +370,7 @@ public class StockScreen {
                     Money mrp = Money.parse(mrpField.getText().trim());
                     Money sp = Money.parse(sellingPriceField.getText().trim());
 
-                    context.getProductService().createVariant(product.id(), varName, barcode, mrp, sp);
+                    context.getProductService().addVariant(product.id(), varName, mrp, sp, barcode);
 
                     loadData();
                     return true;
