@@ -64,4 +64,59 @@ public class SupplierLedgerRepository {
         }
         return 0L;
     }
+
+    public java.util.List<com.shopbilling.model.SupplierLedgerEntry> getEntriesForSupplier(Connection conn, long supplierId) throws SQLException {
+        Objects.requireNonNull(conn, "Connection cannot be null");
+        String sql = "SELECT id, supplier_id, entry_type, amount_paise, reference_type, reference_id, " +
+                "entry_date, notes, created_at, created_by_user_id FROM supplier_ledger_entries " +
+                "WHERE supplier_id = ? ORDER BY entry_date ASC, id ASC;";
+
+        java.util.List<com.shopbilling.model.SupplierLedgerEntry> list = new java.util.ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, supplierId);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(new com.shopbilling.model.SupplierLedgerEntry(
+                            rs.getLong("id"),
+                            rs.getLong("supplier_id"),
+                            rs.getString("entry_type"),
+                            com.shopbilling.model.Money.ofPaise(rs.getLong("amount_paise")),
+                            rs.getString("reference_type"),
+                            rs.getLong("reference_id"),
+                            java.time.LocalDate.parse(rs.getString("entry_date")),
+                            rs.getString("notes"),
+                            rs.getString("created_at"),
+                            rs.getLong("created_by_user_id")
+                    ));
+                }
+            }
+        }
+        return list;
+    }
+
+    public java.util.List<com.shopbilling.model.SupplierPayableSummary> getAllSuppliersWithPayables(Connection conn) throws SQLException {
+        Objects.requireNonNull(conn, "Connection cannot be null");
+        String sql = "SELECT s.id, s.name, s.phone, s.contact_person, " +
+                "COALESCE(SUM(e.amount_paise), 0) as current_payable_paise " +
+                "FROM suppliers s " +
+                "JOIN supplier_ledger_entries e ON s.id = e.supplier_id " +
+                "GROUP BY s.id " +
+                "HAVING current_payable_paise > 0 " +
+                "ORDER BY current_payable_paise DESC;";
+
+        java.util.List<com.shopbilling.model.SupplierPayableSummary> list = new java.util.ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                list.add(new com.shopbilling.model.SupplierPayableSummary(
+                        rs.getLong("id"),
+                        rs.getString("name"),
+                        rs.getString("phone"),
+                        rs.getString("contact_person"),
+                        com.shopbilling.model.Money.ofPaise(rs.getLong("current_payable_paise"))
+                ));
+            }
+        }
+        return list;
+    }
 }
