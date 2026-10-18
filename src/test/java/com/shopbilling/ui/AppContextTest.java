@@ -48,6 +48,9 @@ class AppContextTest {
         assertNotNull(context.getBackupService());
         assertNotNull(context.getDiagnosticsService());
         assertNotNull(context.getBillPdfService());
+        assertNotNull(context.getThermalPrinterService());
+        assertNotNull(context.getScheduledBackupService());
+        assertNotNull(context.getShopSettingsService());
 
         // Initial user state
         assertNull(context.getCurrentUser());

@@ -12,6 +12,7 @@ import javafx.scene.layout.*;
 import javafx.stage.FileChooser;
 
 import java.io.File;
+import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -88,19 +89,27 @@ public class SettingsAndAdminScreen {
         grid.setPadding(new Insets(20));
         grid.setStyle("-fx-background-color: #ffffff; -fx-border-color: #e2e8f0; -fx-border-radius: 6;");
 
+        TextField shopNameField = new TextField();
+        TextField shopPhoneField = new TextField();
+        TextField shopGstinField = new TextField();
+        ComboBox<ThermalWidth> thermalWidthCombo = new ComboBox<>(FXCollections.observableArrayList(ThermalWidth.WIDTH_58MM, ThermalWidth.WIDTH_80MM));
         TextField staffDiscField = new TextField();
         TextField returnLimitField = new TextField();
+        CheckBox negativeStockCheck = new CheckBox("Allow Negative Stock");
+        TextField backupRetentionField = new TextField();
         TextField backupFolderField = new TextField();
         backupFolderField.setPrefWidth(300);
 
-        context.getTransactionHelper().executeRead(conn -> {
-            try {
-                staffDiscField.setText(context.getSettingsRepository().getSetting(conn, "STAFF_MAX_DISCOUNT_PERCENT").orElse("5.00"));
-                returnLimitField.setText(context.getSettingsRepository().getSetting(conn, "STAFF_RETURN_APPROVAL_LIMIT_PAISE").orElse("50000"));
-                backupFolderField.setText(context.getSettingsRepository().getSetting(conn, "BACKUP_EXTERNAL_DIRECTORY").orElse(""));
-            } catch (Exception ignored) {}
-            return null;
-        });
+        ShopProfile current = context.getShopSettingsService().getShopProfile();
+        shopNameField.setText(current.shopName());
+        shopPhoneField.setText(current.shopPhone());
+        shopGstinField.setText(current.shopGstin());
+        thermalWidthCombo.setValue(current.thermalReceiptWidth());
+        staffDiscField.setText(current.staffMaxDiscountPercent().toPlainString());
+        returnLimitField.setText(String.valueOf(current.staffReturnApprovalLimitPaise()));
+        negativeStockCheck.setSelected(current.allowNegativeStock());
+        backupRetentionField.setText(String.valueOf(current.backupRetentionCount()));
+        backupFolderField.setText(current.backupExternalDirectory());
 
         Button saveSettingsBtn = new Button("Save Settings");
         saveSettingsBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 4;");
@@ -111,25 +120,52 @@ public class SettingsAndAdminScreen {
         saveSettingsBtn.setOnAction(e -> {
             try {
                 long userId = context.getCurrentUser() != null ? context.getCurrentUser().id() : 1L;
-                context.getTransactionHelper().execute(conn -> {
-                    context.getSettingsRepository().setSetting(conn, "STAFF_MAX_DISCOUNT_PERCENT", staffDiscField.getText().trim(), userId);
-                    context.getSettingsRepository().setSetting(conn, "STAFF_RETURN_APPROVAL_LIMIT_PAISE", returnLimitField.getText().trim(), userId);
-                    context.getSettingsRepository().setSetting(conn, "BACKUP_EXTERNAL_DIRECTORY", backupFolderField.getText().trim(), userId);
-                    return null;
-                });
+                BigDecimal disc = new BigDecimal(staffDiscField.getText().trim());
+                long retLimit = Long.parseLong(returnLimitField.getText().trim());
+                int retention = Integer.parseInt(backupRetentionField.getText().trim());
+
+                ShopProfile updated = new ShopProfile(
+                        shopNameField.getText().trim(),
+                        current.shopTagline(),
+                        current.shopAddress(),
+                        shopPhoneField.getText().trim(),
+                        shopGstinField.getText().trim(),
+                        thermalWidthCombo.getValue(),
+                        current.termsAndConditions(),
+                        disc,
+                        current.staffCanRegisterSale(),
+                        retLimit,
+                        negativeStockCheck.isSelected(),
+                        retention,
+                        backupFolderField.getText().trim()
+                );
+
+                context.getShopSettingsService().updateShopProfile(userId, updated);
                 new Alert(Alert.AlertType.INFORMATION, "Settings saved successfully!", ButtonType.OK).showAndWait();
             } catch (Exception ex) {
-                new Alert(Alert.AlertType.ERROR, "Failed to save: " + ex.getMessage(), ButtonType.OK).showAndWait();
+                new Alert(Alert.AlertType.ERROR, "Failed to save settings: " + ex.getMessage(), ButtonType.OK).showAndWait();
             }
         });
 
-        grid.add(new Label("Staff Max Discount %:"), 0, 0);
-        grid.add(staffDiscField, 1, 0);
-        grid.add(new Label("Staff Return Approval Limit (paise):"), 0, 1);
-        grid.add(returnLimitField, 1, 1);
-        grid.add(new Label("External Backup Directory:"), 0, 2);
-        grid.add(backupFolderField, 1, 2);
-        grid.add(saveSettingsBtn, 1, 3);
+        grid.add(new Label("Shop Name:"), 0, 0);
+        grid.add(shopNameField, 1, 0);
+        grid.add(new Label("Shop Phone:"), 0, 1);
+        grid.add(shopPhoneField, 1, 1);
+        grid.add(new Label("Shop GSTIN:"), 0, 2);
+        grid.add(shopGstinField, 1, 2);
+        grid.add(new Label("Thermal Printer Width:"), 0, 3);
+        grid.add(thermalWidthCombo, 1, 3);
+        grid.add(new Label("Staff Max Discount %:"), 0, 4);
+        grid.add(staffDiscField, 1, 4);
+        grid.add(new Label("Staff Return Approval Limit (paise):"), 0, 5);
+        grid.add(returnLimitField, 1, 5);
+        grid.add(new Label("Stock Policy:"), 0, 6);
+        grid.add(negativeStockCheck, 1, 6);
+        grid.add(new Label("Backup Retention Count:"), 0, 7);
+        grid.add(backupRetentionField, 1, 7);
+        grid.add(new Label("External Backup Directory:"), 0, 8);
+        grid.add(backupFolderField, 1, 8);
+        grid.add(saveSettingsBtn, 1, 9);
 
         box.getChildren().addAll(grid);
         return box;
@@ -315,6 +351,19 @@ public class SettingsAndAdminScreen {
             }
         });
 
+        Button schedBackupBtn = new Button("Run Scheduled Backup & Retention");
+        schedBackupBtn.setStyle("-fx-background-color: #0d9488; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 4;");
+        schedBackupBtn.setOnAction(e -> {
+            try {
+                long userId = context.getCurrentUser() != null ? context.getCurrentUser().id() : 1L;
+                BackupRecord b = context.getScheduledBackupService().triggerScheduledBackupNow(userId);
+                new Alert(Alert.AlertType.INFORMATION, "Scheduled backup & retention complete:\n" + b.backupFilePath(), ButtonType.OK).showAndWait();
+                loadBackups();
+            } catch (Exception ex) {
+                new Alert(Alert.AlertType.ERROR, "Scheduled backup error: " + ex.getMessage(), ButtonType.OK).showAndWait();
+            }
+        });
+
         Button restoreBtn = new Button("Restore Database From Backup (Owner Only)");
         restoreBtn.setStyle("-fx-background-color: #dc2626; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 4;");
         if (!context.isOwner()) {
@@ -326,7 +375,7 @@ public class SettingsAndAdminScreen {
         diagBtn.setStyle("-fx-background-color: #0284c7; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 4;");
         diagBtn.setOnAction(e -> exportDiagnostics());
 
-        actionRow.getChildren().addAll(backupBtn, restoreBtn, diagBtn);
+        actionRow.getChildren().addAll(backupBtn, schedBackupBtn, restoreBtn, diagBtn);
 
         TableColumn<BackupRecord, String> colPath = new TableColumn<>("Backup File");
         colPath.setCellValueFactory(d -> new SimpleStringProperty(d.getValue().backupFilePath()));

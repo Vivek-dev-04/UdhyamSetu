@@ -92,11 +92,18 @@ public class BackupService {
             throw new RuntimeException(errorMsg, e);
         }
 
-        String filename = String.format("udhyamsetu_backup_%s_%s.db",
-                clock.now().format(FILE_TIMESTAMP_FORMAT),
+        String baseTimestamp = clock.now().format(FILE_TIMESTAMP_FORMAT);
+        String baseName = String.format("udhyamsetu_backup_%s_%s",
+                baseTimestamp,
                 backupType.name().toLowerCase()
         );
-        Path targetFile = targetDir.resolve(filename).toAbsolutePath().normalize();
+        Path candidateFile = targetDir.resolve(baseName + ".db").toAbsolutePath().normalize();
+        int counter = 1;
+        while (Files.exists(candidateFile)) {
+            candidateFile = targetDir.resolve(baseName + "_" + counter + ".db").toAbsolutePath().normalize();
+            counter++;
+        }
+        final Path targetFile = candidateFile;
 
         logger.info("Initiating SQLite online backup [type={}] -> {}", backupType, targetFile);
 
@@ -230,6 +237,20 @@ public class BackupService {
 
     public Optional<BackupRecord> getLastSuccessfulBackup() {
         return transactionHelper.executeRead(backupRepository::getLastSuccessfulBackup);
+    }
+
+    public boolean verifyBackup(Path dbFile) {
+        if (dbFile == null || !Files.exists(dbFile)) {
+            return false;
+        }
+        try {
+            verifyDatabaseIntegrity(dbFile);
+            verifySchemaContents(dbFile);
+            return true;
+        } catch (Exception e) {
+            logger.warn("Backup verification failed for {}: {}", dbFile, e.getMessage());
+            return false;
+        }
     }
 
     public List<BackupRecord> getRecentBackups(int limit) {

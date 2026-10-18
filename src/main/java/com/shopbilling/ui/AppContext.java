@@ -4,6 +4,7 @@ import com.shopbilling.db.*;
 import com.shopbilling.model.User;
 import com.shopbilling.service.*;
 import com.shopbilling.service.pdf.BillPdfService;
+import com.shopbilling.service.printer.ThermalPrinterService;
 
 import java.nio.file.Path;
 import java.util.Objects;
@@ -66,6 +67,9 @@ public class AppContext {
     private final BackupService backupService;
     private final DiagnosticsService diagnosticsService;
     private final BillPdfService billPdfService;
+    private final ThermalPrinterService thermalPrinterService;
+    private final ScheduledBackupService scheduledBackupService;
+    private final ShopSettingsService shopSettingsService;
 
     private User currentUser;
 
@@ -215,6 +219,32 @@ public class AppContext {
                 unitRepository,
                 settingsRepository
         );
+
+        this.thermalPrinterService = new ThermalPrinterService(
+                transactionHelper,
+                saleRepository,
+                paymentRepository,
+                customerRepository,
+                productVariantRepository,
+                productRepository,
+                settingsRepository
+        );
+
+        this.scheduledBackupService = new ScheduledBackupService(
+                backupService,
+                backupRepository,
+                transactionHelper,
+                settingsRepository,
+                auditLogService,
+                clock
+        );
+
+        this.shopSettingsService = new ShopSettingsService(
+                transactionHelper,
+                settingsRepository,
+                userRepository,
+                auditLogService
+        );
     }
 
     public ConnectionFactory getConnectionFactory() { return connectionFactory; }
@@ -240,6 +270,9 @@ public class AppContext {
     public BackupService getBackupService() { return backupService; }
     public DiagnosticsService getDiagnosticsService() { return diagnosticsService; }
     public BillPdfService getBillPdfService() { return billPdfService; }
+    public ThermalPrinterService getThermalPrinterService() { return thermalPrinterService; }
+    public ScheduledBackupService getScheduledBackupService() { return scheduledBackupService; }
+    public ShopSettingsService getShopSettingsService() { return shopSettingsService; }
     public SettingsRepository getSettingsRepository() { return settingsRepository; }
 
     public User getCurrentUser() { return currentUser; }

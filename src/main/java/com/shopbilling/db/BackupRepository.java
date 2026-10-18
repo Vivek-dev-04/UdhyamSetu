@@ -89,6 +89,15 @@ public class BackupRepository {
         return list;
     }
 
+    public void deleteById(Connection conn, long id) throws SQLException {
+        Objects.requireNonNull(conn, "Connection cannot be null");
+        String sql = "DELETE FROM backup_log WHERE id = ?;";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setLong(1, id);
+            ps.executeUpdate();
+        }
+    }
+
     private BackupRecord mapRow(ResultSet rs) throws SQLException {
         return new BackupRecord(
                 rs.getLong("id"),
