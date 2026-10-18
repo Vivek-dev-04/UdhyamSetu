@@ -115,6 +115,25 @@ public class WarrantyRepository {
         }
     }
 
+    public List<WarrantyRecord> findExpiringWithin(Connection conn, LocalDate asOfDate, int daysAhead) throws SQLException {
+        Objects.requireNonNull(conn, "Connection cannot be null");
+        Objects.requireNonNull(asOfDate, "AsOfDate cannot be null");
+        String maxDate = asOfDate.plusDays(daysAhead).toString();
+        String sql = selectWarrantySql() +
+                " WHERE w.status = 'ACTIVE' AND w.warranty_end_date BETWEEN ? AND ? ORDER BY w.warranty_end_date ASC;";
+        List<WarrantyRecord> list = new ArrayList<>();
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, asOfDate.toString());
+            ps.setString(2, maxDate);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    list.add(mapRow(rs));
+                }
+            }
+        }
+        return list;
+    }
+
     public boolean isSerialNumberRegistered(Connection conn, String serialNumber) throws SQLException {
         Objects.requireNonNull(conn, "Connection cannot be null");
         Objects.requireNonNull(serialNumber, "Serial number cannot be null");

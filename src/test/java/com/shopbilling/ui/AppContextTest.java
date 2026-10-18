@@ -68,6 +68,8 @@ class AppContextTest {
         assertNotNull(context.getWarrantyTrackingService());
         assertNotNull(context.getCategoryBrandAnalyticsService());
         assertNotNull(context.getAuditAnomalyService());
+        assertNotNull(context.getCloudBackupSyncService());
+        assertNotNull(context.getI18nService());
 
         // Initial user state
         assertNull(context.getCurrentUser());

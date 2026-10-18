@@ -49,6 +49,7 @@ public class AppContext {
     private final BackupRepository backupRepository;
     private final SettingsRepository settingsRepository;
     private final WarrantyRepository warrantyRepository;
+    private final CloudSyncRepository cloudSyncRepository;
 
     // Services
     private final AuditLogService auditLogService;
@@ -92,6 +93,8 @@ public class AppContext {
     private final WarrantyTrackingService warrantyTrackingService;
     private final CategoryBrandAnalyticsService categoryBrandAnalyticsService;
     private final AuditAnomalyService auditAnomalyService;
+    private final CloudBackupSyncService cloudBackupSyncService;
+    private final I18nService i18nService;
 
     private User currentUser;
 
@@ -134,6 +137,7 @@ public class AppContext {
         this.backupRepository = new BackupRepository();
         this.settingsRepository = new SettingsRepository();
         this.warrantyRepository = new WarrantyRepository();
+        this.cloudSyncRepository = new CloudSyncRepository();
 
         // Initialize services
         this.auditLogService = new AuditLogService(transactionHelper, auditLogRepository, userRepository);
@@ -398,6 +402,19 @@ public class AppContext {
                 settingsRepository,
                 clock
         );
+
+        Path cloudSpoolDir = dataDirHandler.getDataDirectory().resolve("cloud_spool");
+        this.cloudBackupSyncService = new CloudBackupSyncService(
+                transactionHelper,
+                cloudSyncRepository,
+                cloudSpoolDir,
+                clock
+        );
+
+        this.i18nService = new I18nService(
+                transactionHelper,
+                settingsRepository
+        );
     }
 
     public ConnectionFactory getConnectionFactory() { return connectionFactory; }
@@ -443,6 +460,8 @@ public class AppContext {
     public WarrantyTrackingService getWarrantyTrackingService() { return warrantyTrackingService; }
     public CategoryBrandAnalyticsService getCategoryBrandAnalyticsService() { return categoryBrandAnalyticsService; }
     public AuditAnomalyService getAuditAnomalyService() { return auditAnomalyService; }
+    public CloudBackupSyncService getCloudBackupSyncService() { return cloudBackupSyncService; }
+    public I18nService getI18nService() { return i18nService; }
     public SettingsRepository getSettingsRepository() { return settingsRepository; }
 
     public User getCurrentUser() { return currentUser; }

@@ -128,6 +128,14 @@ public class WarrantyTrackingService {
     }
 
     /**
+     * Retrieves active warranties scheduled to expire within the specified number of days.
+     */
+    public List<WarrantyRecord> getWarrantiesExpiringWithin(int daysAhead) {
+        LocalDate today = clock.today();
+        return transactionHelper.executeRead(conn -> warrantyRepository.findExpiringWithin(conn, today, Math.max(1, daysAhead)));
+    }
+
+    /**
      * Records a warranty claim / replacement / void event against a registered serial number.
      */
     public WarrantyRecord processWarrantyClaim(String serialNumber,
