@@ -4,6 +4,7 @@ import com.shopbilling.db.*;
 import com.shopbilling.model.User;
 import com.shopbilling.service.*;
 import com.shopbilling.service.pdf.BillPdfService;
+import com.shopbilling.service.pdf.CustomerStatementPdfService;
 import com.shopbilling.service.printer.ThermalPrinterService;
 
 import java.nio.file.Path;
@@ -75,6 +76,9 @@ public class AppContext {
     private final SupplierReturnService supplierReturnService;
     private final StockAdjustmentService stockAdjustmentService;
     private final TechnicianPricingService technicianPricingService;
+    private final PaymentAllocationService paymentAllocationService;
+    private final CustomerStatementPdfService customerStatementPdfService;
+    private final CatalogueSearchService catalogueSearchService;
 
     private User currentUser;
 
@@ -296,6 +300,25 @@ public class AppContext {
                 userRepository,
                 auditLogService
         );
+
+        this.paymentAllocationService = new PaymentAllocationService(
+                transactionHelper,
+                customerRepository,
+                customerLedgerRepository,
+                saleRepository
+        );
+
+        this.customerStatementPdfService = new CustomerStatementPdfService(
+                creditLedgerService,
+                transactionHelper,
+                settingsRepository,
+                clock
+        );
+
+        this.catalogueSearchService = new CatalogueSearchService(
+                transactionHelper,
+                stockRepository
+        );
     }
 
     public ConnectionFactory getConnectionFactory() { return connectionFactory; }
@@ -329,6 +352,9 @@ public class AppContext {
     public SupplierReturnService getSupplierReturnService() { return supplierReturnService; }
     public StockAdjustmentService getStockAdjustmentService() { return stockAdjustmentService; }
     public TechnicianPricingService getTechnicianPricingService() { return technicianPricingService; }
+    public PaymentAllocationService getPaymentAllocationService() { return paymentAllocationService; }
+    public CustomerStatementPdfService getCustomerStatementPdfService() { return customerStatementPdfService; }
+    public CatalogueSearchService getCatalogueSearchService() { return catalogueSearchService; }
     public SettingsRepository getSettingsRepository() { return settingsRepository; }
 
     public User getCurrentUser() { return currentUser; }
