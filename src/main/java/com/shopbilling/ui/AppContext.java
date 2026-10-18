@@ -4,7 +4,9 @@ import com.shopbilling.db.*;
 import com.shopbilling.model.User;
 import com.shopbilling.service.*;
 import com.shopbilling.service.pdf.BillPdfService;
+import com.shopbilling.service.pdf.CreditNotePdfService;
 import com.shopbilling.service.pdf.CustomerStatementPdfService;
+import com.shopbilling.service.pdf.SupplierStatementPdfService;
 import com.shopbilling.service.printer.ThermalPrinterService;
 
 import java.nio.file.Path;
@@ -79,6 +81,9 @@ public class AppContext {
     private final PaymentAllocationService paymentAllocationService;
     private final CustomerStatementPdfService customerStatementPdfService;
     private final CatalogueSearchService catalogueSearchService;
+    private final CreditNotePdfService creditNotePdfService;
+    private final DayEndReportService dayEndReportService;
+    private final SupplierStatementPdfService supplierStatementPdfService;
 
     private User currentUser;
 
@@ -319,6 +324,33 @@ public class AppContext {
                 transactionHelper,
                 stockRepository
         );
+
+        this.creditNotePdfService = new CreditNotePdfService(
+                transactionHelper,
+                returnRepository,
+                saleRepository,
+                customerRepository,
+                productVariantRepository,
+                productRepository,
+                unitRepository,
+                settingsRepository,
+                clock
+        );
+
+        this.dayEndReportService = new DayEndReportService(
+                transactionHelper,
+                dayEndClosingRepository,
+                expenseRepository,
+                settingsRepository,
+                clock
+        );
+
+        this.supplierStatementPdfService = new SupplierStatementPdfService(
+                creditLedgerService,
+                transactionHelper,
+                settingsRepository,
+                clock
+        );
     }
 
     public ConnectionFactory getConnectionFactory() { return connectionFactory; }
@@ -355,6 +387,9 @@ public class AppContext {
     public PaymentAllocationService getPaymentAllocationService() { return paymentAllocationService; }
     public CustomerStatementPdfService getCustomerStatementPdfService() { return customerStatementPdfService; }
     public CatalogueSearchService getCatalogueSearchService() { return catalogueSearchService; }
+    public CreditNotePdfService getCreditNotePdfService() { return creditNotePdfService; }
+    public DayEndReportService getDayEndReportService() { return dayEndReportService; }
+    public SupplierStatementPdfService getSupplierStatementPdfService() { return supplierStatementPdfService; }
     public SettingsRepository getSettingsRepository() { return settingsRepository; }
 
     public User getCurrentUser() { return currentUser; }
