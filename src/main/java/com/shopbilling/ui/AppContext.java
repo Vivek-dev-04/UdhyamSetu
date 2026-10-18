@@ -72,6 +72,9 @@ public class AppContext {
     private final ShopSettingsService shopSettingsService;
     private final ConvertRegisteredSaleService convertRegisteredSaleService;
     private final LowStockService lowStockService;
+    private final SupplierReturnService supplierReturnService;
+    private final StockAdjustmentService stockAdjustmentService;
+    private final TechnicianPricingService technicianPricingService;
 
     private User currentUser;
 
@@ -263,6 +266,36 @@ public class AppContext {
                 transactionHelper,
                 stockRepository
         );
+
+        this.supplierReturnService = new SupplierReturnService(
+                transactionHelper,
+                supplierRepository,
+                supplierLedgerRepository,
+                productVariantRepository,
+                stockService,
+                userRepository,
+                auditLogService,
+                clock
+        );
+
+        this.stockAdjustmentService = new StockAdjustmentService(
+                transactionHelper,
+                stockRepository,
+                productVariantRepository,
+                stockService,
+                userRepository,
+                auditLogService
+        );
+
+        this.technicianPricingService = new TechnicianPricingService(
+                transactionHelper,
+                settingsRepository,
+                productVariantRepository,
+                profitRepository,
+                customerRepository,
+                userRepository,
+                auditLogService
+        );
     }
 
     public ConnectionFactory getConnectionFactory() { return connectionFactory; }
@@ -293,6 +326,9 @@ public class AppContext {
     public ShopSettingsService getShopSettingsService() { return shopSettingsService; }
     public ConvertRegisteredSaleService getConvertRegisteredSaleService() { return convertRegisteredSaleService; }
     public LowStockService getLowStockService() { return lowStockService; }
+    public SupplierReturnService getSupplierReturnService() { return supplierReturnService; }
+    public StockAdjustmentService getStockAdjustmentService() { return stockAdjustmentService; }
+    public TechnicianPricingService getTechnicianPricingService() { return technicianPricingService; }
     public SettingsRepository getSettingsRepository() { return settingsRepository; }
 
     public User getCurrentUser() { return currentUser; }

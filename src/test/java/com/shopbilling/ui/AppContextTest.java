@@ -53,6 +53,9 @@ class AppContextTest {
         assertNotNull(context.getShopSettingsService());
         assertNotNull(context.getConvertRegisteredSaleService());
         assertNotNull(context.getLowStockService());
+        assertNotNull(context.getSupplierReturnService());
+        assertNotNull(context.getStockAdjustmentService());
+        assertNotNull(context.getTechnicianPricingService());
 
         // Initial user state
         assertNull(context.getCurrentUser());
