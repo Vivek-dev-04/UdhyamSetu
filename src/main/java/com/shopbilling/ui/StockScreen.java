@@ -305,8 +305,6 @@ public class StockScreen {
         unitCombo.setValue("PIECE");
 
         TextField variantNameField = new TextField("Standard");
-        TextField barcodeField = new TextField();
-        barcodeField.setPromptText("Optional barcode");
 
         TextField mrpField = new TextField("100.00");
         TextField sellingPriceField = new TextField("80.00");
@@ -322,14 +320,12 @@ public class StockScreen {
         grid.add(unitCombo, 1, 3);
         grid.add(new Label("Variant Name:"), 0, 4);
         grid.add(variantNameField, 1, 4);
-        grid.add(new Label("Barcode:"), 0, 5);
-        grid.add(barcodeField, 1, 5);
-        grid.add(new Label("MRP (Rs) *:"), 0, 6);
-        grid.add(mrpField, 1, 6);
-        grid.add(new Label("Selling Price (Rs) *:"), 0, 7);
-        grid.add(sellingPriceField, 1, 7);
-        grid.add(new Label("Reorder Level:"), 0, 8);
-        grid.add(reorderLevelField, 1, 8);
+        grid.add(new Label("MRP (Rs) *:"), 0, 5);
+        grid.add(mrpField, 1, 5);
+        grid.add(new Label("Selling Price (Rs) *:"), 0, 6);
+        grid.add(sellingPriceField, 1, 6);
+        grid.add(new Label("Reorder Level:"), 0, 7);
+        grid.add(reorderLevelField, 1, 7);
 
         dialog.getDialogPane().setContent(grid);
 
@@ -340,7 +336,6 @@ public class StockScreen {
                 String prodName = productNameField.getText().trim();
                 String unit = unitCombo.getValue();
                 String varName = variantNameField.getText().trim().isEmpty() ? "Standard" : variantNameField.getText().trim();
-                String barcode = barcodeField.getText().trim().isEmpty() ? null : barcodeField.getText().trim();
 
                 if (brandName.isEmpty() || catName.isEmpty() || prodName.isEmpty()) {
                     Alert alert = new Alert(Alert.AlertType.ERROR, "Brand, Category, and Product Name are required.", ButtonType.OK);
@@ -370,7 +365,7 @@ public class StockScreen {
                     Money mrp = Money.parse(mrpField.getText().trim());
                     Money sp = Money.parse(sellingPriceField.getText().trim());
 
-                    context.getProductService().addVariant(product.id(), varName, mrp, sp, barcode);
+                    context.getProductService().addVariant(product.id(), varName, mrp, sp, null);
 
                     loadData();
                     return true;

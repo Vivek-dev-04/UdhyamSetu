@@ -44,7 +44,6 @@ public class I18nService {
         EN_MESSAGES.put("btn.expenses", "Expenses & Day-End Closing");
         EN_MESSAGES.put("btn.reports", "Reports & Profit Analysis");
         EN_MESSAGES.put("btn.settings", "Settings & Admin");
-        EN_MESSAGES.put("btn.warranty", "Warranty & Appliance Serials");
 
         EN_MESSAGES.put("bill.tax_invoice", "TAX INVOICE");
         EN_MESSAGES.put("bill.number", "Bill No");
@@ -63,7 +62,6 @@ public class I18nService {
         EN_MESSAGES.put("err.owner_only", "This operation is restricted to the shop owner");
         EN_MESSAGES.put("err.discount_exceeded", "Discount exceeds the maximum allowed limit of {0}%");
         EN_MESSAGES.put("err.day_already_closed", "Day {0} has already been closed");
-        EN_MESSAGES.put("err.warranty_expired", "Warranty for serial {0} expired on {1}");
 
         EN_MESSAGES.put("status.active", "Active");
         EN_MESSAGES.put("status.expired", "Expired");
@@ -80,7 +78,6 @@ public class I18nService {
         HI_MESSAGES.put("btn.expenses", "दुकान खर्चे और बंदी");
         HI_MESSAGES.put("btn.reports", "रिपोर्ट और मुनाफा");
         HI_MESSAGES.put("btn.settings", "सेटिंग्स और व्यवस्थापक");
-        HI_MESSAGES.put("btn.warranty", "वारंटी और सीरियल नंबर");
 
         HI_MESSAGES.put("bill.tax_invoice", "कर चालान / पक्का बिल");
         HI_MESSAGES.put("bill.number", "बिल संख्या");
@@ -99,7 +96,6 @@ public class I18nService {
         HI_MESSAGES.put("err.owner_only", "यह कार्य केवल दुकान मालिक द्वारा किया जा सकता है");
         HI_MESSAGES.put("err.discount_exceeded", "छूट अनुमत सीमा {0}% से अधिक है");
         HI_MESSAGES.put("err.day_already_closed", "तारीख {0} का खाता पहले ही बंद हो चुका है");
-        HI_MESSAGES.put("err.warranty_expired", "सीरियल नंबर {0} की वारंटी {1} को समाप्त हो चुकी है");
 
         HI_MESSAGES.put("status.active", "सक्रिय (वारंटी में)");
         HI_MESSAGES.put("status.expired", "समाप्त (एक्सपायर्ड)");

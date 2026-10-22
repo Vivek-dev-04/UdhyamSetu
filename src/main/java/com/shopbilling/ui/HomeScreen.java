@@ -122,10 +122,7 @@ public class HomeScreen {
         MenuItem recordStockInItem = new MenuItem("Record Stock In (Distributor Purchase)");
         recordStockInItem.setOnAction(e -> screenManager.showStock());
 
-        MenuItem warrantyItem = new MenuItem("Appliance Warranties & Serial Numbers");
-        warrantyItem.setOnAction(e -> screenManager.showWarrantyManagement());
-
-        inventoryMenu.getItems().addAll(stockItem, recordStockInItem, warrantyItem);
+        inventoryMenu.getItems().addAll(stockItem, recordStockInItem);
 
         // Menu: Ledgers (FR-2)
         Menu ledgersMenu = new Menu("Ledgers");

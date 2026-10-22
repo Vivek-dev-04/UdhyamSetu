@@ -23,7 +23,7 @@ import java.util.*;
 
 /**
  * Keyboard-first billing and counter sales screen (PRD Section 7.3, FR-8 - FR-14).
- * Supports barcode scanning, decimal quantities, per-line discounts, customer types,
+ * Supports decimal quantities, per-line discounts, customer types,
  * split payments, and PDF bill generation.
  */
 public class BillingScreen {
@@ -35,7 +35,6 @@ public class BillingScreen {
     private final ObservableList<CartLineItem> cartItems = FXCollections.observableArrayList();
     private final ComboBox<Customer> customerComboBox = new ComboBox<>();
     private final ComboBox<ProductVariantWithInfo> productComboBox = new ComboBox<>();
-    private final TextField barcodeField = new TextField();
     private final TextField quantityField = new TextField("1");
     private final TextField priceField = new TextField();
     private final TextField discountField = new TextField("0");
@@ -115,12 +114,8 @@ public class BillingScreen {
         entryGrid.setPadding(new Insets(10));
         entryGrid.setStyle("-fx-background-color: #ffffff; -fx-background-radius: 6; -fx-border-color: #e2e8f0; -fx-border-radius: 6;");
 
-        barcodeField.setPromptText("Scan Barcode");
-        barcodeField.setPrefWidth(160);
-        barcodeField.setOnAction(e -> handleBarcodeScan());
-
         loadProducts();
-        productComboBox.setPrefWidth(320);
+        productComboBox.setPrefWidth(380);
         productComboBox.setPromptText("Search / Select Product");
         productComboBox.setOnAction(e -> {
             ProductVariantWithInfo selected = productComboBox.getValue();
@@ -132,29 +127,30 @@ public class BillingScreen {
 
         quantityField.setPrefWidth(80);
         quantityField.setPromptText("Qty");
+        quantityField.setOnAction(e -> addItemToCart());
 
         priceField.setPrefWidth(100);
         priceField.setPromptText("Rate (Rs)");
+        priceField.setOnAction(e -> addItemToCart());
 
         discountField.setPrefWidth(90);
         discountField.setPromptText("Disc (Rs)");
+        discountField.setOnAction(e -> addItemToCart());
 
         Button addItemBtn = new Button("Add Item [Enter]");
         addItemBtn.setStyle("-fx-background-color: #0284c7; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 4;");
         addItemBtn.setOnAction(e -> addItemToCart());
 
-        entryGrid.add(new Label("Barcode:"), 0, 0);
-        entryGrid.add(barcodeField, 0, 1);
-        entryGrid.add(new Label("Product & Variant:"), 1, 0);
-        entryGrid.add(productComboBox, 1, 1);
-        entryGrid.add(new Label("Quantity:"), 2, 0);
-        entryGrid.add(quantityField, 2, 1);
-        entryGrid.add(new Label("Rate (Rs):"), 3, 0);
-        entryGrid.add(priceField, 3, 1);
-        entryGrid.add(new Label("Discount (Rs):"), 4, 0);
-        entryGrid.add(discountField, 4, 1);
-        entryGrid.add(new Label("Action:"), 5, 0);
-        entryGrid.add(addItemBtn, 5, 1);
+        entryGrid.add(new Label("Product & Variant:"), 0, 0);
+        entryGrid.add(productComboBox, 0, 1);
+        entryGrid.add(new Label("Quantity:"), 1, 0);
+        entryGrid.add(quantityField, 1, 1);
+        entryGrid.add(new Label("Rate (Rs):"), 2, 0);
+        entryGrid.add(priceField, 2, 1);
+        entryGrid.add(new Label("Discount (Rs):"), 3, 0);
+        entryGrid.add(discountField, 3, 1);
+        entryGrid.add(new Label("Action:"), 4, 0);
+        entryGrid.add(addItemBtn, 4, 1);
 
         // Cart TableView
         TableView<CartLineItem> tableView = new TableView<>(cartItems);
@@ -247,25 +243,6 @@ public class BillingScreen {
         return root;
     }
 
-    private void handleBarcodeScan() {
-        String barcode = barcodeField.getText().trim();
-        if (barcode.isEmpty()) return;
-
-        Optional<ProductVariantWithInfo> match = productComboBox.getItems().stream()
-                .filter(p -> barcode.equalsIgnoreCase(p.variant().barcode()))
-                .findFirst();
-
-        if (match.isPresent()) {
-            productComboBox.setValue(match.get());
-            priceField.setText(match.get().variant().sellingPrice().toRupeesString());
-            addItemToCart();
-            barcodeField.clear();
-        } else {
-            errorLabel.setText("No product found with barcode: " + barcode);
-            errorLabel.setVisible(true);
-        }
-    }
-
     private void addItemToCart() {
         errorLabel.setVisible(false);
         ProductVariantWithInfo selected = productComboBox.getValue();
@@ -297,8 +274,10 @@ public class BillingScreen {
             // Reset inputs
             quantityField.setText("1");
             discountField.setText("0");
+            productComboBox.setValue(null);
+            priceField.clear();
             updateTotals();
-            barcodeField.requestFocus();
+            productComboBox.requestFocus();
 
         } catch (Exception ex) {
             errorLabel.setText("Invalid item input: " + ex.getMessage());

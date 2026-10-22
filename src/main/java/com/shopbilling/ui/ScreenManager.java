@@ -73,11 +73,6 @@ public class ScreenManager {
         setScene(screen.getView(), 1050, 720, "UdhyamSetu - Settings & Admin");
     }
 
-    public void showWarrantyManagement() {
-        WarrantyManagementScreen screen = new WarrantyManagementScreen(this);
-        setScene(screen.getView(), 1100, 750, "UdhyamSetu - Appliance Warranty & Serial Tracking");
-    }
-
     private void setScene(Parent root, double width, double height, String title) {
         Scene scene = stage.getScene();
         if (scene == null) {
