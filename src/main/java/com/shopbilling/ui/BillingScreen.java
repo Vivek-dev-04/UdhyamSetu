@@ -1,6 +1,7 @@
 package com.shopbilling.ui;
 
 import com.shopbilling.model.*;
+import com.shopbilling.service.ShopSettingsService;
 import com.shopbilling.service.pdf.BillPdfService;
 import com.shopbilling.service.pdf.BillPrintModel;
 import javafx.beans.property.SimpleStringProperty;
@@ -78,29 +79,89 @@ public class BillingScreen {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
-        titleRow.getChildren().addAll(backBtn, titleLabel, modeBadge, spacer);
+        Button shopDetailsBtn = new Button("🏢 Shop / Bill Profile");
+        shopDetailsBtn.setStyle("-fx-background-color: #f8fafc; -fx-border-color: #cbd5e1; -fx-text-fill: #1e3a8a; -fx-font-weight: bold; -fx-border-radius: 4; -fx-cursor: hand;");
+        shopDetailsBtn.setOnAction(e -> showShopBillingDetailsDialog());
 
-        // Customer selection row (FR-10)
-        HBox customerRow = new HBox(15);
+        titleRow.getChildren().addAll(backBtn, titleLabel, modeBadge, spacer, shopDetailsBtn);
+
+        // Customer selection row & B2B/B2C Billing Details (FR-10)
+        HBox customerRow = new HBox(10);
         customerRow.setAlignment(Pos.CENTER_LEFT);
 
-        Label custLabel = new Label("Customer:");
-        custLabel.setStyle("-fx-font-weight: bold;");
+        Label custLabel = new Label("Billed To / Party:");
+        custLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 13px;");
+
+        customerComboBox.setPrefWidth(320);
+        customerComboBox.setPromptText("Select Customer / Firm (Default: Walk-in)");
+
+        Button newCustBtn = new Button("➕ Customer / Firm Form");
+        newCustBtn.setStyle("-fx-background-color: #f0fdf4; -fx-border-color: #86efac; -fx-text-fill: #166534; -fx-font-weight: bold; -fx-border-radius: 4;");
+        newCustBtn.setOnAction(e -> showCustomerBillingDialog(null));
+
+        Button editCustBtn = new Button("✏️ Edit Details");
+        editCustBtn.setStyle("-fx-background-color: #f8fafc; -fx-border-color: #cbd5e1; -fx-border-radius: 4;");
+        editCustBtn.setDisable(true);
+        editCustBtn.setOnAction(e -> {
+            if (customerComboBox.getValue() != null) {
+                showCustomerBillingDialog(customerComboBox.getValue());
+            }
+        });
+
+        Button walkInBtn = new Button("✕ Walk-in");
+        walkInBtn.setStyle("-fx-background-color: #f8fafc; -fx-border-color: #cbd5e1; -fx-border-radius: 4;");
+        walkInBtn.setOnAction(e -> customerComboBox.setValue(null));
+
+        customerRow.getChildren().addAll(custLabel, customerComboBox, newCustBtn, editCustBtn, walkInBtn);
+
+        // Buyer details status card
+        HBox customerDetailsCard = new HBox(12);
+        customerDetailsCard.setAlignment(Pos.CENTER_LEFT);
+        customerDetailsCard.setPadding(new Insets(6, 12, 6, 12));
+        customerDetailsCard.setStyle("-fx-background-color: #f8fafc; -fx-background-radius: 6; -fx-border-color: #e2e8f0; -fx-border-radius: 6;");
+
+        Label customerBadge = new Label("🛒 B2C Walk-in Customer");
+        customerBadge.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #475569;");
+
+        Label customerDetailsText = new Label("Retail Counter Sale • Cash Memo • Tax invoice without firm GSTIN");
+        customerDetailsText.setStyle("-fx-text-fill: #64748b; -fx-font-size: 12px;");
+
+        customerDetailsCard.getChildren().addAll(customerBadge, customerDetailsText);
+
+        customerComboBox.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal == null) {
+                editCustBtn.setDisable(true);
+                customerBadge.setText("🛒 B2C Walk-in Customer");
+                customerBadge.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #475569;");
+                customerDetailsText.setText("Retail Counter Sale • Cash Memo • Tax invoice without firm GSTIN");
+                customerDetailsCard.setStyle("-fx-background-color: #f8fafc; -fx-background-radius: 6; -fx-border-color: #e2e8f0; -fx-border-radius: 6;");
+            } else if (newVal.isFirm()) {
+                editCustBtn.setDisable(false);
+                customerBadge.setText("🏢 B2B TAX INVOICE — FIRM");
+                customerBadge.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #1e40af;");
+                String gstinStr = newVal.getGstin() != null ? newVal.getGstin() : "Pending GSTIN";
+                String stateStr = newVal.getStateName() + " (" + newVal.getStateCode() + ")";
+                String phoneStr = newVal.phone() != null ? " • Ph: " + newVal.phone() : "";
+                String addrStr = newVal.address() != null ? " • " + newVal.address() : "";
+                customerDetailsText.setText(newVal.name() + " | GSTIN: " + gstinStr + " | State: " + stateStr + phoneStr + addrStr);
+                customerDetailsCard.setStyle("-fx-background-color: #eff6ff; -fx-background-radius: 6; -fx-border-color: #bfdbfe; -fx-border-radius: 6;");
+            } else {
+                editCustBtn.setDisable(false);
+                customerBadge.setText("👤 INDIVIDUAL CUSTOMER (" + newVal.customerType() + ")");
+                customerBadge.setStyle("-fx-font-weight: bold; -fx-font-size: 12px; -fx-text-fill: #166534;");
+                String phoneStr = newVal.phone() != null ? " • Ph: " + newVal.phone() : " • No phone";
+                String addrStr = newVal.address() != null ? " • " + newVal.address() : "";
+                customerDetailsText.setText(newVal.name() + phoneStr + addrStr);
+                customerDetailsCard.setStyle("-fx-background-color: #f0fdf4; -fx-background-radius: 6; -fx-border-color: #bbf7d0; -fx-border-radius: 6;");
+            }
+        });
 
         loadCustomers();
-        customerComboBox.setPrefWidth(300);
-        customerComboBox.setPromptText("Select Customer (Default: Walk-in)");
-
-        Button newCustBtn = new Button("+ New Customer");
-        newCustBtn.setStyle("-fx-background-color: #f8fafc; -fx-border-color: #cbd5e1; -fx-border-radius: 4;");
-        newCustBtn.setOnAction(e -> showAddCustomerDialog());
-
-        customerRow.getChildren().addAll(custLabel, customerComboBox, newCustBtn);
 
         errorLabel.setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;");
         errorLabel.setVisible(false);
 
-        topBox.getChildren().addAll(titleRow, customerRow, errorLabel);
+        topBox.getChildren().addAll(titleRow, customerRow, customerDetailsCard, errorLabel);
         root.setTop(topBox);
 
         // 2. CENTER: Product Entry Bar & Cart Table (FR-8, FR-9)
@@ -219,6 +280,7 @@ public class BillingScreen {
         totalsGrid.add(new Label("Bill Discount:"), 0, 1);
         overallDiscountField.setPrefWidth(80);
         overallDiscountField.setOnAction(e -> updateTotals());
+        overallDiscountField.textProperty().addListener((obs, oldVal, newVal) -> updateTotals());
         totalsGrid.add(overallDiscountField, 1, 1);
         totalsGrid.add(new Label("Net Payable:"), 0, 2);
         grandTotalLabel.setStyle("-fx-font-size: 22px; -fx-font-weight: bold; -fx-text-fill: #059669;");
@@ -440,16 +502,31 @@ public class BillingScreen {
 
     private void loadCustomers() {
         List<Customer> list = context.getCustomerSupplierService().getAllCustomers();
+        Customer current = customerComboBox.getValue();
         customerComboBox.setItems(FXCollections.observableArrayList(list));
         customerComboBox.setCellFactory(param -> new ListCell<>() {
             @Override
             protected void updateItem(Customer c, boolean empty) {
                 super.updateItem(c, empty);
-                if (empty || c == null) setText(null);
-                else setText(c.name() + " (" + (c.phone() != null ? c.phone() : "No Phone") + ") [" + c.customerType() + "]");
+                if (empty || c == null) {
+                    setText(null);
+                } else if (c.isFirm()) {
+                    String gst = c.getGstin() != null ? " [GSTIN: " + c.getGstin() + "]" : " [FIRM]";
+                    setText("🏢 " + c.name() + gst + " • " + (c.phone() != null ? c.phone() : "No Phone"));
+                } else {
+                    setText("👤 " + c.name() + " (" + (c.phone() != null ? c.phone() : "No Phone") + ") [" + c.customerType() + "]");
+                }
             }
         });
         customerComboBox.setButtonCell(customerComboBox.getCellFactory().call(null));
+        if (current != null) {
+            for (Customer c : list) {
+                if (Objects.equals(c.id(), current.id())) {
+                    customerComboBox.setValue(c);
+                    break;
+                }
+            }
+        }
     }
 
     private void loadProducts() {
@@ -473,19 +550,444 @@ public class BillingScreen {
         productComboBox.setButtonCell(productComboBox.getCellFactory().call(null));
     }
 
-    private void showAddCustomerDialog() {
-        TextInputDialog dialog = new TextInputDialog();
-        dialog.setTitle("Quick Customer Creation");
-        dialog.setHeaderText("Enter Customer Name");
-        dialog.showAndWait().ifPresent(name -> {
-            if (!name.trim().isEmpty()) {
-                Customer created = context.getCustomerSupplierService().createCustomer(
-                        name.trim(), null, CustomerType.RETAIL, null, null, null
-                );
-                loadCustomers();
-                customerComboBox.setValue(created);
+    private void showCustomerBillingDialog(Customer customerToEdit) {
+        Dialog<Customer> dialog = new Dialog<>();
+        dialog.setTitle(customerToEdit == null ? "Customer & Firm Billing Form" : "Edit Customer / Firm Billing Details");
+        dialog.setHeaderText(customerToEdit == null
+                ? "Register B2B Firm (Tax Invoice) or Individual Customer"
+                : "Update Billing Information for " + customerToEdit.name());
+
+        ButtonType saveBtnType = new ButtonType("Save & Select", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(saveBtnType, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(12);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(15, 20, 15, 20));
+
+        // Radio toggle for Firm (B2B) vs Individual (B2C)
+        ToggleGroup typeGroup = new ToggleGroup();
+        RadioButton firmRadio = new RadioButton("🏢 Firm / Business (B2B Tax Invoice)");
+        firmRadio.setToggleGroup(typeGroup);
+        firmRadio.setStyle("-fx-font-weight: bold; -fx-text-fill: #1e40af;");
+
+        RadioButton indRadio = new RadioButton("👤 Individual Customer (Retail / Technician)");
+        indRadio.setToggleGroup(typeGroup);
+        indRadio.setStyle("-fx-font-weight: bold; -fx-text-fill: #166534;");
+
+        HBox radioBox = new HBox(20, firmRadio, indRadio);
+        radioBox.setPadding(new Insets(0, 0, 8, 0));
+
+        Label nameLabel = new Label("Firm / Company Name *:");
+        nameLabel.setStyle("-fx-font-weight: bold;");
+        TextField nameField = new TextField();
+        nameField.setPromptText("e.g. NAVEEN ELECTRICAL & SANITARY");
+        nameField.setPrefWidth(350);
+
+        Label phoneLabel = new Label("Phone / Contact Number:");
+        TextField phoneField = new TextField();
+        phoneField.setPromptText("e.g. 9461586959");
+
+        Label gstinLabel = new Label("GSTIN / UIN (15 Digits):");
+        gstinLabel.setStyle("-fx-font-weight: bold;");
+        TextField gstinField = new TextField();
+        gstinField.setPromptText("e.g. 08ACDPT3960H1ZC");
+
+        Label gstinFeedback = new Label("");
+        gstinFeedback.setStyle("-fx-font-size: 11px;");
+
+        Label stateLabel = new Label("State & State Code:");
+        ComboBox<String> stateCombo = new ComboBox<>();
+        stateCombo.setPrefWidth(350);
+        List<String> stateList = new ArrayList<>();
+        StateCodeHelper.getAllStates().forEach((code, sName) -> stateList.add(sName + " (" + code + ")"));
+        stateCombo.setItems(FXCollections.observableArrayList(stateList));
+        stateCombo.setValue("Rajasthan (08)");
+
+        Label addrLabel = new Label("Billing / Delivery Address:");
+        TextArea addressField = new TextArea();
+        addressField.setPromptText("e.g. 10 / 185 , SAWARN PATH, MANSAROVER, JAIPUR (RAJASTHAN)");
+        addressField.setPrefRowCount(2);
+        addressField.setWrapText(true);
+
+        Label subTypeLabel = new Label("Customer Sub-Type:");
+        ComboBox<CustomerType> subTypeCombo = new ComboBox<>(FXCollections.observableArrayList(CustomerType.RETAIL, CustomerType.TECHNICIAN));
+        subTypeCombo.setValue(CustomerType.TECHNICIAN);
+
+        Label creditLimitLabel = new Label("Credit Limit (₹, Optional):");
+        TextField creditLimitField = new TextField();
+        creditLimitField.setPromptText("e.g. 50000");
+
+        Label notesLabel = new Label("Additional Notes / Remarks:");
+        TextField notesField = new TextField();
+        notesField.setPromptText("Optional remarks");
+
+        // Dynamic behavior on radio toggle
+        typeGroup.selectedToggleProperty().addListener((obs, oldVal, newVal) -> {
+            if (firmRadio.isSelected()) {
+                nameLabel.setText("Firm / Business Name *:");
+                nameField.setPromptText("e.g. NAVEEN ELECTRICAL & SANITARY");
+                gstinLabel.setStyle("-fx-font-weight: bold; -fx-text-fill: #1e40af;");
+                subTypeCombo.setValue(CustomerType.TECHNICIAN);
+            } else {
+                nameLabel.setText("Customer Full Name *:");
+                nameField.setPromptText("e.g. Rajesh Sharma");
+                gstinLabel.setStyle("-fx-font-weight: normal; -fx-text-fill: #374151;");
+                subTypeCombo.setValue(CustomerType.RETAIL);
             }
         });
+
+        // GSTIN uppercase & auto state detection
+        gstinField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                String upper = newVal.toUpperCase().replaceAll("\\s+", "");
+                if (!upper.equals(newVal)) {
+                    gstinField.setText(upper);
+                    return;
+                }
+                if (upper.length() == 15) {
+                    if (upper.matches("\\d{2}[A-Z]{5}\\d{4}[A-Z]{1}[A-Z\\d]{1}[Z]{1}[A-Z\\d]{1}")) {
+                        String code = upper.substring(0, 2);
+                        String sName = StateCodeHelper.getStateName(code);
+                        gstinFeedback.setText("✓ Valid Indian GSTIN (State: " + sName + ")");
+                        gstinFeedback.setStyle("-fx-text-fill: #16a34a; -fx-font-size: 11px;");
+                        for (String item : stateCombo.getItems()) {
+                            if (item.contains("(" + code + ")")) {
+                                stateCombo.setValue(item);
+                                break;
+                            }
+                        }
+                    } else {
+                        gstinFeedback.setText("⚠ Invalid GSTIN format (Expected 15 chars e.g. 08ACDPT3960H1ZC)");
+                        gstinFeedback.setStyle("-fx-text-fill: #dc2626; -fx-font-size: 11px;");
+                    }
+                } else if (!upper.isEmpty()) {
+                    gstinFeedback.setText("Enter 15-character GSTIN (" + upper.length() + "/15)");
+                    gstinFeedback.setStyle("-fx-text-fill: #6b7280; -fx-font-size: 11px;");
+                } else {
+                    gstinFeedback.setText("");
+                }
+            }
+        });
+
+        // Default or pre-populated state
+        if (customerToEdit != null) {
+            if (customerToEdit.isFirm()) {
+                firmRadio.setSelected(true);
+            } else {
+                indRadio.setSelected(true);
+            }
+            nameField.setText(customerToEdit.name());
+            if (customerToEdit.phone() != null) phoneField.setText(customerToEdit.phone());
+            if (customerToEdit.address() != null) addressField.setText(customerToEdit.address());
+            if (customerToEdit.creditLimit() != null) creditLimitField.setText(customerToEdit.creditLimit().toRupeesString());
+            String existingGst = customerToEdit.getGstin();
+            if (existingGst != null) gstinField.setText(existingGst);
+            String existingCode = customerToEdit.getStateCode();
+            for (String item : stateCombo.getItems()) {
+                if (item.contains("(" + existingCode + ")")) {
+                    stateCombo.setValue(item);
+                    break;
+                }
+            }
+            subTypeCombo.setValue(customerToEdit.customerType());
+            if (customerToEdit.notes() != null) {
+                String cleanNotes = customerToEdit.notes()
+                        .replaceAll("\\[FIRM\\]", "")
+                        .replaceAll("\\[INDIVIDUAL\\]", "")
+                        .replaceAll("GSTIN:\\s*[A-Z0-9]+", "")
+                        .replaceAll("State:\\s*[^|]+", "")
+                        .replaceAll("\\|\\s*\\|", "")
+                        .replaceAll("^\\s*\\|\\s*", "")
+                        .replaceAll("\\s*\\|\\s*$", "")
+                        .trim();
+                notesField.setText(cleanNotes);
+            }
+        } else {
+            firmRadio.setSelected(true);
+        }
+
+        // Layout
+        grid.add(radioBox, 0, 0, 2, 1);
+        grid.add(nameLabel, 0, 1);
+        grid.add(nameField, 1, 1);
+        grid.add(phoneLabel, 0, 2);
+        grid.add(phoneField, 1, 2);
+        grid.add(gstinLabel, 0, 3);
+        VBox gstinBox = new VBox(2, gstinField, gstinFeedback);
+        grid.add(gstinBox, 1, 3);
+        grid.add(stateLabel, 0, 4);
+        grid.add(stateCombo, 1, 4);
+        grid.add(addrLabel, 0, 5);
+        grid.add(addressField, 1, 5);
+        grid.add(subTypeLabel, 0, 6);
+        grid.add(subTypeCombo, 1, 6);
+        grid.add(creditLimitLabel, 0, 7);
+        grid.add(creditLimitField, 1, 7);
+        grid.add(notesLabel, 0, 8);
+        grid.add(notesField, 1, 8);
+
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(btn -> {
+            if (btn == saveBtnType) {
+                String name = nameField.getText().trim();
+                if (name.isEmpty()) {
+                    new Alert(Alert.AlertType.ERROR, "Name cannot be empty.", ButtonType.OK).showAndWait();
+                    return null;
+                }
+
+                String phone = phoneField.getText().trim();
+                if (phone.isEmpty()) phone = null;
+
+                String address = addressField.getText().trim();
+                if (address.isEmpty()) address = null;
+
+                String gstin = gstinField.getText().trim().toUpperCase();
+                if (!gstin.isEmpty() && gstin.length() != 15) {
+                    new Alert(Alert.AlertType.WARNING, "GSTIN should be 15 characters long if provided.", ButtonType.OK).showAndWait();
+                }
+
+                String selectedState = stateCombo.getValue();
+                String stateName = "Rajasthan";
+                String stateCode = "08";
+                if (selectedState != null && selectedState.contains("(") && selectedState.contains(")")) {
+                    stateName = selectedState.substring(0, selectedState.indexOf('(')).trim();
+                    stateCode = selectedState.substring(selectedState.indexOf('(') + 1, selectedState.indexOf(')')).trim();
+                }
+
+                Money creditLimit = null;
+                if (!creditLimitField.getText().trim().isEmpty()) {
+                    try {
+                        creditLimit = Money.parse(creditLimitField.getText().trim());
+                    } catch (Exception ex) {
+                        new Alert(Alert.AlertType.ERROR, "Invalid credit limit: " + ex.getMessage(), ButtonType.OK).showAndWait();
+                        return null;
+                    }
+                }
+
+                String extraNotes = notesField.getText().trim();
+
+                // Format structured notes
+                String finalNotes;
+                if (firmRadio.isSelected()) {
+                    String gstPart = !gstin.isEmpty() ? ("GSTIN: " + gstin) : "GSTIN: UNREGISTERED";
+                    String stPart = "State: " + stateName + " (" + stateCode + ")";
+                    finalNotes = "[FIRM] " + gstPart + " | " + stPart + (extraNotes.isEmpty() ? "" : " | " + extraNotes);
+                } else {
+                    if (!gstin.isEmpty()) {
+                        finalNotes = "[INDIVIDUAL] GSTIN: " + gstin + " | State: " + stateName + " (" + stateCode + ")" + (extraNotes.isEmpty() ? "" : " | " + extraNotes);
+                    } else if (!extraNotes.isEmpty()) {
+                        finalNotes = extraNotes;
+                    } else {
+                        finalNotes = null;
+                    }
+                }
+
+                try {
+                    Customer saved;
+                    if (customerToEdit == null) {
+                        saved = context.getCustomerSupplierService().createCustomer(
+                                name, phone, subTypeCombo.getValue(), address, creditLimit, finalNotes
+                        );
+                    } else {
+                        saved = context.getCustomerSupplierService().updateCustomer(
+                                customerToEdit.id(), name, phone, subTypeCombo.getValue(), address, creditLimit, finalNotes
+                        );
+                    }
+                    loadCustomers();
+                    customerComboBox.setValue(saved);
+                    return saved;
+                } catch (Exception ex) {
+                    new Alert(Alert.AlertType.ERROR, "Failed to save customer/firm: " + ex.getMessage(), ButtonType.OK).showAndWait();
+                    return null;
+                }
+            }
+            return null;
+        });
+
+        dialog.showAndWait();
+    }
+
+    private void showShopBillingDetailsDialog() {
+        Dialog<Boolean> dialog = new Dialog<>();
+        dialog.setTitle("Shop & Firm Billing Profile");
+        dialog.setHeaderText("Set your firm name, GSTIN, address, bank, and UPI details.\nThese details appear on all generated A4 bills and the payment QR code.");
+
+        ButtonType saveBtnType = new ButtonType("Save & Update Bills", ButtonBar.ButtonData.OK_DONE);
+        dialog.getDialogPane().getButtonTypes().addAll(saveBtnType, ButtonType.CANCEL);
+
+        GridPane grid = new GridPane();
+        grid.setHgap(12);
+        grid.setVgap(10);
+        grid.setPadding(new Insets(15, 20, 15, 20));
+
+        ShopSettingsService.ShopBillingDetails current = context.getShopSettingsService().getShopBillingDetails();
+
+        TextField nameField = new TextField(current.shopName());
+        nameField.setPrefWidth(350);
+
+        TextField taglineField = new TextField(current.shopTagline());
+        taglineField.setPromptText("e.g. Electrical Goods & Hardware Retail");
+
+        TextField addressField = new TextField(current.shopAddress());
+        TextField phoneField = new TextField(current.shopPhone());
+        TextField emailField = new TextField(current.shopEmail());
+
+        TextField gstinField = new TextField(current.shopGstin());
+        gstinField.setPromptText("15-digit GSTIN (e.g. 08AACFM6417B1ZN)");
+
+        ComboBox<String> stateCombo = new ComboBox<>();
+        StateCodeHelper.getAllStates().forEach((code, state) -> stateCombo.getItems().add(state + " (" + code + ")"));
+        String currentStateStr = current.shopStateName() + " (" + current.shopStateCode() + ")";
+        if (stateCombo.getItems().contains(currentStateStr)) {
+            stateCombo.setValue(currentStateStr);
+        } else {
+            stateCombo.setValue("Rajasthan (08)");
+        }
+
+        TextField panField = new TextField(current.shopPan());
+        panField.setPromptText("10-digit PAN");
+
+        TextField bankField = new TextField(current.shopBankName());
+        bankField.setPromptText("Bank Name (e.g. PUNJAB NATIONAL BANK)");
+
+        TextField acctField = new TextField(current.shopAccountNo());
+        acctField.setPromptText("Bank Account Number");
+
+        TextField ifscField = new TextField(current.shopIfsc());
+        ifscField.setPromptText("IFSC Code (e.g. PUNB0006110)");
+
+        TextField branchField = new TextField(current.shopBranch());
+        branchField.setPromptText("Branch Name");
+
+        TextField upiField = new TextField(current.shopUpiId());
+        upiField.setPromptText("UPI ID (e.g. 9829053822@upi)");
+
+        // Auto-extract state and PAN when GSTIN is typed
+        gstinField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                String clean = newVal.trim().toUpperCase();
+                if (!clean.equals(newVal)) {
+                    gstinField.setText(clean);
+                }
+                if (clean.length() >= 2) {
+                    String stateCode = clean.substring(0, 2);
+                    String stateName = StateCodeHelper.getStateName(stateCode);
+                    String match = stateName + " (" + stateCode + ")";
+                    if (stateCombo.getItems().contains(match)) {
+                        stateCombo.setValue(match);
+                    }
+                }
+                if (clean.length() >= 12) {
+                    panField.setText(clean.substring(2, 12));
+                }
+            }
+        });
+
+        ifscField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && !newVal.equals(newVal.toUpperCase())) {
+                ifscField.setText(newVal.toUpperCase());
+            }
+        });
+
+        int row = 0;
+        Label firmHeader = new Label("1. FIRM & BUSINESS INFORMATION");
+        firmHeader.setStyle("-fx-font-weight: bold; -fx-text-fill: #1e3a8a;");
+        grid.add(firmHeader, 0, row++, 2, 1);
+
+        grid.add(new Label("Firm / Shop Name: *"), 0, row);
+        grid.add(nameField, 1, row++);
+
+        grid.add(new Label("Tagline / Nature:"), 0, row);
+        grid.add(taglineField, 1, row++);
+
+        grid.add(new Label("Shop Address:"), 0, row);
+        grid.add(addressField, 1, row++);
+
+        grid.add(new Label("Phone / Mobile:"), 0, row);
+        grid.add(phoneField, 1, row++);
+
+        grid.add(new Label("Email:"), 0, row);
+        grid.add(emailField, 1, row++);
+
+        grid.add(new Label("Shop GSTIN:"), 0, row);
+        grid.add(gstinField, 1, row++);
+
+        grid.add(new Label("State & Code:"), 0, row);
+        grid.add(stateCombo, 1, row++);
+
+        grid.add(new Label("PAN Number:"), 0, row);
+        grid.add(panField, 1, row++);
+
+        Label bankHeader = new Label("2. BANK & PAYMENT DETAILS (For QR Code & Bill)");
+        bankHeader.setStyle("-fx-font-weight: bold; -fx-text-fill: #1e3a8a; -fx-padding: 8 0 0 0;");
+        grid.add(bankHeader, 0, row++, 2, 1);
+
+        grid.add(new Label("Bank Name:"), 0, row);
+        grid.add(bankField, 1, row++);
+
+        grid.add(new Label("Account No:"), 0, row);
+        grid.add(acctField, 1, row++);
+
+        grid.add(new Label("IFSC Code:"), 0, row);
+        grid.add(ifscField, 1, row++);
+
+        grid.add(new Label("Branch:"), 0, row);
+        grid.add(branchField, 1, row++);
+
+        grid.add(new Label("UPI ID (For Bill QR):"), 0, row);
+        grid.add(upiField, 1, row++);
+
+        dialog.getDialogPane().setContent(grid);
+
+        dialog.setResultConverter(btn -> {
+            if (btn == saveBtnType) {
+                String firmName = nameField.getText().trim();
+                if (firmName.isEmpty()) {
+                    new Alert(Alert.AlertType.ERROR, "Firm / Shop Name cannot be blank", ButtonType.OK).showAndWait();
+                    return false;
+                }
+
+                String selectedState = stateCombo.getValue();
+                String stateName = "Rajasthan";
+                String stateCode = "08";
+                if (selectedState != null && selectedState.contains("(") && selectedState.contains(")")) {
+                    stateName = selectedState.substring(0, selectedState.indexOf('(')).trim();
+                    stateCode = selectedState.substring(selectedState.indexOf('(') + 1, selectedState.indexOf(')')).trim();
+                }
+
+                ShopSettingsService.ShopBillingDetails updated = new ShopSettingsService.ShopBillingDetails(
+                        firmName,
+                        taglineField.getText().trim(),
+                        addressField.getText().trim(),
+                        phoneField.getText().trim(),
+                        emailField.getText().trim(),
+                        gstinField.getText().trim(),
+                        stateName,
+                        stateCode,
+                        panField.getText().trim(),
+                        bankField.getText().trim(),
+                        acctField.getText().trim(),
+                        ifscField.getText().trim(),
+                        branchField.getText().trim(),
+                        upiField.getText().trim()
+                );
+
+                try {
+                    long userId = context.getCurrentUser() != null ? context.getCurrentUser().id() : 1L;
+                    context.getShopSettingsService().updateShopBillingDetails(userId, updated);
+                    new Alert(Alert.AlertType.INFORMATION, "Shop & Firm details updated successfully!\nAll new bills will print with this firm name, GST, bank & QR code.", ButtonType.OK).showAndWait();
+                    return true;
+                } catch (Exception ex) {
+                    new Alert(Alert.AlertType.ERROR, "Failed to update shop details: " + ex.getMessage(), ButtonType.OK).showAndWait();
+                    return false;
+                }
+            }
+            return false;
+        });
+
+        dialog.showAndWait();
     }
 
     public record CartLineItem(

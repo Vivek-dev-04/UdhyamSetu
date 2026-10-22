@@ -228,4 +228,75 @@ class BillPdfServiceTest {
         assertTrue(bytes.length > 500);
         assertEquals("%PDF-", new String(bytes, 0, 5, StandardCharsets.US_ASCII));
     }
+
+    @Test
+    @DisplayName("B2B Firm Tax Invoice with GSTIN and Payment QR code renders successfully")
+    void shouldRenderB2BFirmInvoiceWithUpiQrCode() {
+        BillPrintModel.ShopInfo shop = new BillPrintModel.ShopInfo(
+                "MAHESHWARI ELECTRICALS - (2025-27)",
+                "Chamaliwala Market, Opp. G.P.O., M.I. Road, Jaipur (RAJASTHAN)",
+                "Chamaliwala Market, Opp. G.P.O., M.I. Road, Jaipur (RAJASTHAN)",
+                "0141-2366620, 2371211 / MOB- 9829053822/9829053866",
+                "08AACFM6417B1ZN",
+                "Mecombines@rediffmail.Com",
+                "Rajasthan",
+                "08",
+                "AACFM6417B",
+                "PUNJAB NATIONAL BANK",
+                "00615010000080",
+                "PUNB0006110",
+                "M.I. ROAD - JAIPUR",
+                "9829053822@upi"
+        );
+
+        BillPrintModel.CustomerInfo b2bCustomer = new BillPrintModel.CustomerInfo(
+                "NAVEEN ELECTRICAL & SANITARY",
+                "9461586959",
+                "10 / 185 , SAWARN PATH, MANSAROVER, JAIPUR (RAJASTHAN)",
+                CustomerType.TECHNICIAN,
+                "08ACDPT3960H1ZC",
+                "Rajasthan",
+                "08"
+        );
+        assertTrue(b2bCustomer.isFirm());
+
+        List<BillPrintModel.BillLineItem> items = List.of(
+                new BillPrintModel.BillLineItem(1, "1.0 BC 1100VPVC INS.IND CBL BLU 90M -SIL", "Standard", "Polycab", "COL", Quantity.of(21), Money.ofPaise(151265), Money.ZERO, Money.ofPaise(3176565), "85446020", 18.0),
+                new BillPrintModel.BillLineItem(2, "1.5 BC 1100VPVC INS.IND CBL BLK 90M -SIL", "Standard", "Polycab", "COL", Quantity.of(10), Money.ofPaise(223540), Money.ZERO, Money.ofPaise(2235400), "85446020", 18.0),
+                new BillPrintModel.BillLineItem(3, "4.0 BC 1100VPVC INS.IND CBL BLK 90M -SIL", "Standard", "Polycab", "COL", Quantity.of(1), Money.ofPaise(542061), Money.ZERO, Money.ofPaise(542061), "85446020", 18.0)
+        );
+
+        Money subtotal = Money.ofPaise(5954026);
+        Money discount = Money.ZERO;
+        Money total = Money.ofPaise(6558500); // 65,585.00
+        String words = IndianNumberToWords.convertPaiseToInrWords(total.getPaise());
+
+        BillPrintModel model = new BillPrintModel(
+                shop,
+                "2026-27/3032",
+                LocalDate.of(2026, 7, 11),
+                "2026-27",
+                b2bCustomer,
+                items,
+                subtotal,
+                discount,
+                total,
+                words,
+                List.of(new BillPrintModel.BillPaymentInfo(PaymentMode.UPI, total, "UPI-REF-9988")),
+                "Counter Cashier",
+                "Testing B2B Tax Invoice",
+                "DEL-NOTE-44",
+                "Hand Delivery",
+                "Jaipur",
+                "upi://pay?pa=9829053822@upi&pn=MAHESHWARI%20ELECTRICALS&am=65585.00&cu=INR&tn=Invoice%202026-27/3032"
+        );
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        billPdfService.renderPdf(model, baos);
+        byte[] pdfBytes = baos.toByteArray();
+
+        assertNotNull(pdfBytes);
+        assertTrue(pdfBytes.length > 2000, "B2B invoice with QR code should produce complete PDF file");
+        assertEquals("%PDF-", new String(pdfBytes, 0, 5, StandardCharsets.US_ASCII));
+    }
 }

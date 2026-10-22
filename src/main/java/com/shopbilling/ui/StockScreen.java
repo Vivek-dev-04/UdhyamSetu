@@ -500,7 +500,10 @@ public class StockScreen {
         TextField qtyField = new TextField("10");
         TextField costPriceField = new TextField("50.00");
         TextField paidAmountField = new TextField();
-        paidAmountField.setPromptText("Leave empty for full payment");
+        paidAmountField.setPromptText("Enter 0 for full credit, or amount paid upfront");
+
+        Label creditHint = new Label("• Enter 0 if purchased on full credit (adds to Supplier Payables)\n• Enter partial amount if partially paid\n• Leave blank if paid in full immediately");
+        creditHint.setStyle("-fx-font-size: 11px; -fx-text-fill: #64748b;");
 
         grid.add(new Label("Distributor Supplier:"), 0, 0);
         grid.add(supplierBox, 1, 0);
@@ -514,6 +517,7 @@ public class StockScreen {
         grid.add(costPriceField, 1, 4);
         grid.add(new Label("Amount Paid Now (Rs):"), 0, 5);
         grid.add(paidAmountField, 1, 5);
+        grid.add(creditHint, 1, 6);
 
         dialog.getDialogPane().setContent(grid);
 

@@ -205,4 +205,72 @@ class ShopSettingsServiceTest {
         assertEquals("Super Mart", log.newValue());
         assertEquals("Rebranding shop", log.reason());
     }
+
+    @Test
+    @DisplayName("getShopBillingDetails returns valid billing defaults")
+    void testGetShopBillingDetailsDefaults() {
+        ShopSettingsService.ShopBillingDetails billing = shopSettingsService.getShopBillingDetails();
+
+        assertNotNull(billing);
+        assertNotNull(billing.shopName());
+        assertNotNull(billing.shopGstin());
+        assertNotNull(billing.shopBankName());
+        assertNotNull(billing.shopAccountNo());
+        assertNotNull(billing.shopIfsc());
+        assertNotNull(billing.shopUpiId());
+    }
+
+    @Test
+    @DisplayName("updateShopBillingDetails updates firm, bank, and UPI info with audit logging")
+    void testUpdateShopBillingDetailsByOwner() {
+        ShopSettingsService.ShopBillingDetails updated = new ShopSettingsService.ShopBillingDetails(
+                "APEX ELECTRICALS PVT LTD",
+                "Wholesale & Retail Distributors",
+                "Station Road, Sikar (Rajasthan)",
+                "9829012345",
+                "apex@electricals.com",
+                "08AAACA1234A1Z1",
+                "Rajasthan",
+                "08",
+                "AAACA1234A",
+                "STATE BANK OF INDIA",
+                "12345678901",
+                "SBIN0001234",
+                "MAIN BRANCH",
+                "apex@sbi"
+        );
+
+        shopSettingsService.updateShopBillingDetails(ownerUserId, updated);
+
+        ShopSettingsService.ShopBillingDetails fetched = shopSettingsService.getShopBillingDetails();
+        assertEquals("APEX ELECTRICALS PVT LTD", fetched.shopName());
+        assertEquals("Wholesale & Retail Distributors", fetched.shopTagline());
+        assertEquals("Station Road, Sikar (Rajasthan)", fetched.shopAddress());
+        assertEquals("9829012345", fetched.shopPhone());
+        assertEquals("apex@electricals.com", fetched.shopEmail());
+        assertEquals("08AAACA1234A1Z1", fetched.shopGstin());
+        assertEquals("Rajasthan", fetched.shopStateName());
+        assertEquals("08", fetched.shopStateCode());
+        assertEquals("AAACA1234A", fetched.shopPan());
+        assertEquals("STATE BANK OF INDIA", fetched.shopBankName());
+        assertEquals("12345678901", fetched.shopAccountNo());
+        assertEquals("SBIN0001234", fetched.shopIfsc());
+        assertEquals("MAIN BRANCH", fetched.shopBranch());
+        assertEquals("apex@sbi", fetched.shopUpiId());
+
+        // Verify audit log entries
+        List<AuditLogRecord> logs = auditLogService.getRecentLogs(ownerUserId, 50);
+        assertTrue(logs.stream().anyMatch(l -> "SHOP_NAME".equals(l.entityId())));
+        assertTrue(logs.stream().anyMatch(l -> "SHOP_UPI_ID".equals(l.entityId())));
+    }
+
+    @Test
+    @DisplayName("Staff user cannot update shop billing details and receives UnauthorizedException")
+    void testStaffCannotUpdateShopBillingDetails() {
+        ShopSettingsService.ShopBillingDetails details = shopSettingsService.getShopBillingDetails();
+
+        assertThrows(UnauthorizedException.class, () ->
+                shopSettingsService.updateShopBillingDetails(staffUserId, details)
+        );
+    }
 }

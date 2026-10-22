@@ -127,10 +127,10 @@ public class HomeScreen {
         // Menu: Ledgers (FR-2)
         Menu ledgersMenu = new Menu("Ledgers");
         MenuItem customerDuesItem = new MenuItem("Customer Dues & Aging (0-30, 31-60, 61-90, 90+ days)");
-        customerDuesItem.setOnAction(e -> screenManager.showCreditLedger());
+        customerDuesItem.setOnAction(e -> screenManager.showCreditLedger(0));
 
         MenuItem supplierLedgerItem = new MenuItem("Supplier Ledgers & Payables");
-        supplierLedgerItem.setOnAction(e -> screenManager.showCreditLedger());
+        supplierLedgerItem.setOnAction(e -> screenManager.showCreditLedger(1));
 
         ledgersMenu.getItems().addAll(customerDuesItem, supplierLedgerItem);
 
@@ -159,7 +159,7 @@ public class HomeScreen {
 
         // Menu: Settings & Backup (FR-2, FR-46, FR-50)
         Menu adminMenu = new Menu("Settings & Tools");
-        MenuItem settingsItem = new MenuItem("Shop Settings");
+        MenuItem settingsItem = new MenuItem("Shop & Firm Billing Profile (GST, Bank, UPI)");
         settingsItem.setOnAction(e -> screenManager.showSettingsAndAdmin());
 
         MenuItem backupItem = new MenuItem("Database Backup & Restore");

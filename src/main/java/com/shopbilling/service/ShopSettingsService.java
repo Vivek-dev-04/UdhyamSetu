@@ -29,6 +29,15 @@ public class ShopSettingsService {
     public static final String KEY_SHOP_ADDRESS = "SHOP_ADDRESS";
     public static final String KEY_SHOP_PHONE = "SHOP_PHONE";
     public static final String KEY_SHOP_GSTIN = "SHOP_GSTIN";
+    public static final String KEY_SHOP_EMAIL = "SHOP_EMAIL";
+    public static final String KEY_SHOP_STATE_NAME = "SHOP_STATE_NAME";
+    public static final String KEY_SHOP_STATE_CODE = "SHOP_STATE_CODE";
+    public static final String KEY_SHOP_PAN = "SHOP_PAN";
+    public static final String KEY_SHOP_BANK_NAME = "SHOP_BANK_NAME";
+    public static final String KEY_SHOP_ACCOUNT_NO = "SHOP_ACCOUNT_NO";
+    public static final String KEY_SHOP_IFSC = "SHOP_IFSC";
+    public static final String KEY_SHOP_BANK_BRANCH = "SHOP_BANK_BRANCH";
+    public static final String KEY_SHOP_UPI_ID = "SHOP_UPI_ID";
     public static final String KEY_THERMAL_RECEIPT_WIDTH = "THERMAL_RECEIPT_WIDTH";
     public static final String KEY_TERMS_AND_CONDITIONS = "TERMS_AND_CONDITIONS";
     public static final String KEY_STAFF_MAX_DISCOUNT_PERCENT = "STAFF_MAX_DISCOUNT_PERCENT";
@@ -168,6 +177,70 @@ public class ShopSettingsService {
         return transactionHelper.executeRead(conn ->
                 settingsRepository.getSettingOrDefault(conn, key.trim().toUpperCase(), defaultValue)
         );
+    }
+
+    public record ShopBillingDetails(
+            String shopName,
+            String shopTagline,
+            String shopAddress,
+            String shopPhone,
+            String shopEmail,
+            String shopGstin,
+            String shopStateName,
+            String shopStateCode,
+            String shopPan,
+            String shopBankName,
+            String shopAccountNo,
+            String shopIfsc,
+            String shopBranch,
+            String shopUpiId
+    ) {}
+
+    public ShopBillingDetails getShopBillingDetails() {
+        return transactionHelper.executeRead(conn -> {
+            String shopName = settingsRepository.getSettingOrDefault(conn, KEY_SHOP_NAME, "MAHESHWARI ELECTRICALS - (2025-27)");
+            String shopTagline = settingsRepository.getSettingOrDefault(conn, KEY_SHOP_TAGLINE, "Dealers in Cables, Switches, Lighting & Industrial Electrical Goods");
+            String shopAddress = settingsRepository.getSettingOrDefault(conn, KEY_SHOP_ADDRESS, "Chamaliwala Market, Opp. G.P.O., M.I. Road, Jaipur (RAJASTHAN)");
+            String shopPhone = settingsRepository.getSettingOrDefault(conn, KEY_SHOP_PHONE, "0141-2366620, 2371211 / MOB- 9829053822/9829053866");
+            String shopGstin = settingsRepository.getSettingOrDefault(conn, KEY_SHOP_GSTIN, "08AACFM6417B1ZN");
+            String shopEmail = settingsRepository.getSettingOrDefault(conn, KEY_SHOP_EMAIL, "Mecombines@rediffmail.Com");
+            String shopStateName = settingsRepository.getSettingOrDefault(conn, KEY_SHOP_STATE_NAME, "Rajasthan");
+            String shopStateCode = settingsRepository.getSettingOrDefault(conn, KEY_SHOP_STATE_CODE, "08");
+            String panDefault = (shopGstin != null && shopGstin.length() >= 12 ? shopGstin.substring(2, 12) : "AACFM6417B");
+            String shopPan = settingsRepository.getSettingOrDefault(conn, KEY_SHOP_PAN, panDefault);
+            String shopBankName = settingsRepository.getSettingOrDefault(conn, KEY_SHOP_BANK_NAME, "PUNJAB NATIONAL BANK");
+            String shopAccountNo = settingsRepository.getSettingOrDefault(conn, KEY_SHOP_ACCOUNT_NO, "00615010000080");
+            String shopIfsc = settingsRepository.getSettingOrDefault(conn, KEY_SHOP_IFSC, "PUNB0006110");
+            String shopBranch = settingsRepository.getSettingOrDefault(conn, KEY_SHOP_BANK_BRANCH, "M.I. ROAD - JAIPUR");
+            String shopUpiId = settingsRepository.getSettingOrDefault(conn, KEY_SHOP_UPI_ID, "9829053822@upi");
+
+            return new ShopBillingDetails(
+                    shopName, shopTagline, shopAddress, shopPhone, shopEmail,
+                    shopGstin, shopStateName, shopStateCode, shopPan,
+                    shopBankName, shopAccountNo, shopIfsc, shopBranch, shopUpiId
+            );
+        });
+    }
+
+    public void updateShopBillingDetails(long requestingUserId, ShopBillingDetails details) {
+        Objects.requireNonNull(details, "ShopBillingDetails cannot be null");
+        transactionHelper.executeVoid(conn -> {
+            verifyOwner(conn, requestingUserId);
+            updateSettingIfChanged(conn, requestingUserId, KEY_SHOP_NAME, details.shopName(), "Shop name updated");
+            updateSettingIfChanged(conn, requestingUserId, KEY_SHOP_TAGLINE, details.shopTagline(), "Shop tagline updated");
+            updateSettingIfChanged(conn, requestingUserId, KEY_SHOP_ADDRESS, details.shopAddress(), "Shop address updated");
+            updateSettingIfChanged(conn, requestingUserId, KEY_SHOP_PHONE, details.shopPhone(), "Shop phone updated");
+            updateSettingIfChanged(conn, requestingUserId, KEY_SHOP_EMAIL, details.shopEmail(), "Shop email updated");
+            updateSettingIfChanged(conn, requestingUserId, KEY_SHOP_GSTIN, details.shopGstin(), "Shop GSTIN updated");
+            updateSettingIfChanged(conn, requestingUserId, KEY_SHOP_STATE_NAME, details.shopStateName(), "Shop state name updated");
+            updateSettingIfChanged(conn, requestingUserId, KEY_SHOP_STATE_CODE, details.shopStateCode(), "Shop state code updated");
+            updateSettingIfChanged(conn, requestingUserId, KEY_SHOP_PAN, details.shopPan(), "Shop PAN updated");
+            updateSettingIfChanged(conn, requestingUserId, KEY_SHOP_BANK_NAME, details.shopBankName(), "Shop bank name updated");
+            updateSettingIfChanged(conn, requestingUserId, KEY_SHOP_ACCOUNT_NO, details.shopAccountNo(), "Shop account number updated");
+            updateSettingIfChanged(conn, requestingUserId, KEY_SHOP_IFSC, details.shopIfsc(), "Shop IFSC updated");
+            updateSettingIfChanged(conn, requestingUserId, KEY_SHOP_BANK_BRANCH, details.shopBranch(), "Shop bank branch updated");
+            updateSettingIfChanged(conn, requestingUserId, KEY_SHOP_UPI_ID, details.shopUpiId(), "Shop UPI ID updated");
+        });
     }
 
     private void updateSettingIfChanged(Connection conn, long userId, String key, String newValue, String auditReason) throws SQLException {

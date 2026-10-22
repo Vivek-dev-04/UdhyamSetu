@@ -1,6 +1,7 @@
 package com.shopbilling.ui;
 
 import com.shopbilling.model.*;
+import com.shopbilling.service.ShopSettingsService;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -9,6 +10,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
+import javafx.stage.DirectoryChooser;
 import javafx.stage.FileChooser;
 
 import java.io.File;
@@ -63,7 +65,7 @@ public class SettingsAndAdminScreen {
         TabPane tabPane = new TabPane();
         tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
-        Tab settingsTab = new Tab("Shop Settings", buildSettingsTab());
+        Tab settingsTab = new Tab("Shop & Billing Profile", buildSettingsTab());
         Tab usersTab = new Tab("User Accounts", buildUsersTab());
         Tab auditTab = new Tab("Audit Trail (FR-44)", buildAuditTab());
         Tab backupTab = new Tab("Backups & Diagnostics", buildBackupTab());
@@ -81,43 +83,249 @@ public class SettingsAndAdminScreen {
         return root;
     }
 
-    private VBox buildSettingsTab() {
+    private ScrollPane buildSettingsTab() {
         VBox box = new VBox(20);
-        box.setPadding(new Insets(25));
+        box.setPadding(new Insets(20, 25, 25, 25));
 
-        GridPane grid = new GridPane();
-        grid.setHgap(15);
-        grid.setVgap(15);
-        grid.setPadding(new Insets(20));
-        grid.setStyle("-fx-background-color: #ffffff; -fx-border-color: #e2e8f0; -fx-border-radius: 6;");
+        // Header info banner
+        VBox headerBanner = new VBox(4);
+        headerBanner.setPadding(new Insets(12, 16, 12, 16));
+        headerBanner.setStyle("-fx-background-color: #eff6ff; -fx-background-radius: 8; -fx-border-color: #bfdbfe; -fx-border-radius: 8;");
+        Label bannerTitle = new Label("🏢 Shop & Firm Billing Profile");
+        bannerTitle.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-text-fill: #1e3a8a;");
+        Label bannerDesc = new Label("Set your firm name, GSTIN, registered address, bank account, and UPI ID. These details are printed on tax invoices, bill PDFs, and the 'Scan to pay' QR code.");
+        bannerDesc.setStyle("-fx-font-size: 13px; -fx-text-fill: #3b82f6;");
+        headerBanner.getChildren().addAll(bannerTitle, bannerDesc);
 
-        TextField shopNameField = new TextField();
-        TextField shopPhoneField = new TextField();
-        TextField shopGstinField = new TextField();
+        // Fetch current data
+        ShopProfile currentProfile = context.getShopSettingsService().getShopProfile();
+        ShopSettingsService.ShopBillingDetails currentBilling = context.getShopSettingsService().getShopBillingDetails();
+
+        // -------------------------------------------------------------
+        // CARD 1: FIRM & INVOICE DETAILS
+        // -------------------------------------------------------------
+        VBox card1 = new VBox(12);
+        card1.setPadding(new Insets(16));
+        card1.setStyle("-fx-background-color: #ffffff; -fx-border-color: #e2e8f0; -fx-border-radius: 8; -fx-background-radius: 8;");
+
+        Label card1Title = new Label("1. Firm / Business Information (Printed on Bills & Invoices)");
+        card1Title.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #0f172a;");
+
+        GridPane grid1 = new GridPane();
+        grid1.setHgap(15);
+        grid1.setVgap(12);
+
+        TextField shopNameField = new TextField(currentBilling.shopName());
+        shopNameField.setPrefWidth(350);
+
+        TextField shopTaglineField = new TextField(currentBilling.shopTagline());
+        shopTaglineField.setPromptText("e.g. Dealers in Cables, Switches, Lighting & Industrial Electrical Goods");
+
+        TextField shopAddressField = new TextField(currentBilling.shopAddress());
+        shopAddressField.setPromptText("Complete Shop / Registered Office Address");
+
+        TextField shopPhoneField = new TextField(currentBilling.shopPhone());
+        shopPhoneField.setPromptText("e.g. 0141-2366620, MOB- 9829053822");
+
+        TextField shopEmailField = new TextField(currentBilling.shopEmail());
+        shopEmailField.setPromptText("e.g. Mecombines@rediffmail.Com");
+
+        TextField shopGstinField = new TextField(currentBilling.shopGstin());
+        shopGstinField.setPromptText("15-digit GSTIN (e.g. 08AACFM6417B1ZN)");
+
+        ComboBox<String> stateCombo = new ComboBox<>();
+        StateCodeHelper.getAllStates().forEach((code, state) -> stateCombo.getItems().add(state + " (" + code + ")"));
+        String currState = currentBilling.shopStateName() + " (" + currentBilling.shopStateCode() + ")";
+        if (stateCombo.getItems().contains(currState)) {
+            stateCombo.setValue(currState);
+        } else {
+            stateCombo.setValue("Rajasthan (08)");
+        }
+
+        TextField shopPanField = new TextField(currentBilling.shopPan());
+        shopPanField.setPromptText("10-digit PAN (e.g. AACFM6417B)");
+
+        // Auto-extract state and PAN when GSTIN is typed
+        shopGstinField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null) {
+                String clean = newVal.trim().toUpperCase();
+                if (!clean.equals(newVal)) {
+                    shopGstinField.setText(clean);
+                }
+                if (clean.length() >= 2) {
+                    String stateCode = clean.substring(0, 2);
+                    String stateName = StateCodeHelper.getStateName(stateCode);
+                    String match = stateName + " (" + stateCode + ")";
+                    if (stateCombo.getItems().contains(match)) {
+                        stateCombo.setValue(match);
+                    }
+                }
+                if (clean.length() >= 12) {
+                    shopPanField.setText(clean.substring(2, 12));
+                }
+            }
+        });
+
+        int r1 = 0;
+        grid1.add(new Label("Firm / Shop Name: *"), 0, r1);
+        grid1.add(shopNameField, 1, r1++);
+
+        grid1.add(new Label("Tagline / Nature:"), 0, r1);
+        grid1.add(shopTaglineField, 1, r1++);
+
+        grid1.add(new Label("Shop Address:"), 0, r1);
+        grid1.add(shopAddressField, 1, r1++);
+
+        grid1.add(new Label("Phone / Contact:"), 0, r1);
+        grid1.add(shopPhoneField, 1, r1++);
+
+        grid1.add(new Label("Email Address:"), 0, r1);
+        grid1.add(shopEmailField, 1, r1++);
+
+        grid1.add(new Label("Shop GSTIN:"), 0, r1);
+        grid1.add(shopGstinField, 1, r1++);
+
+        grid1.add(new Label("State Name & Code:"), 0, r1);
+        grid1.add(stateCombo, 1, r1++);
+
+        grid1.add(new Label("PAN Number:"), 0, r1);
+        grid1.add(shopPanField, 1, r1++);
+
+        card1.getChildren().addAll(card1Title, grid1);
+
+        // -------------------------------------------------------------
+        // CARD 2: BANK & UPI DETAILS (QR CODE & BANK BOX)
+        // -------------------------------------------------------------
+        VBox card2 = new VBox(12);
+        card2.setPadding(new Insets(16));
+        card2.setStyle("-fx-background-color: #ffffff; -fx-border-color: #e2e8f0; -fx-border-radius: 8; -fx-background-radius: 8;");
+
+        Label card2Title = new Label("2. Bank & Payment Details (Printed on Bills & 'Scan to pay' QR Code)");
+        card2Title.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #0f172a;");
+
+        GridPane grid2 = new GridPane();
+        grid2.setHgap(15);
+        grid2.setVgap(12);
+
+        TextField shopBankNameField = new TextField(currentBilling.shopBankName());
+        shopBankNameField.setPromptText("e.g. PUNJAB NATIONAL BANK");
+        shopBankNameField.setPrefWidth(350);
+
+        TextField shopAccountNoField = new TextField(currentBilling.shopAccountNo());
+        shopAccountNoField.setPromptText("e.g. 00615010000080");
+
+        TextField shopIfscField = new TextField(currentBilling.shopIfsc());
+        shopIfscField.setPromptText("e.g. PUNB0006110");
+        shopIfscField.textProperty().addListener((obs, oldVal, newVal) -> {
+            if (newVal != null && !newVal.equals(newVal.toUpperCase())) {
+                shopIfscField.setText(newVal.toUpperCase());
+            }
+        });
+
+        TextField shopBranchField = new TextField(currentBilling.shopBranch());
+        shopBranchField.setPromptText("e.g. M.I. ROAD - JAIPUR");
+
+        TextField shopUpiIdField = new TextField(currentBilling.shopUpiId());
+        shopUpiIdField.setPromptText("e.g. 9829053822@upi (Used to generate Bill QR Code)");
+
+        int r2 = 0;
+        grid2.add(new Label("Bank Name:"), 0, r2);
+        grid2.add(shopBankNameField, 1, r2++);
+
+        grid2.add(new Label("Account Number:"), 0, r2);
+        grid2.add(shopAccountNoField, 1, r2++);
+
+        grid2.add(new Label("IFSC Code:"), 0, r2);
+        grid2.add(shopIfscField, 1, r2++);
+
+        grid2.add(new Label("Branch Name:"), 0, r2);
+        grid2.add(shopBranchField, 1, r2++);
+
+        grid2.add(new Label("UPI ID (For QR):"), 0, r2);
+        grid2.add(shopUpiIdField, 1, r2++);
+
+        card2.getChildren().addAll(card2Title, grid2);
+
+        // -------------------------------------------------------------
+        // CARD 3: STORE POLICY, HARDWARE & BACKUP
+        // -------------------------------------------------------------
+        VBox card3 = new VBox(12);
+        card3.setPadding(new Insets(16));
+        card3.setStyle("-fx-background-color: #ffffff; -fx-border-color: #e2e8f0; -fx-border-radius: 8; -fx-background-radius: 8;");
+
+        Label card3Title = new Label("3. Store Policy, Hardware & Backup Preferences");
+        card3Title.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #0f172a;");
+
+        GridPane grid3 = new GridPane();
+        grid3.setHgap(15);
+        grid3.setVgap(12);
+
         ComboBox<ThermalWidth> thermalWidthCombo = new ComboBox<>(FXCollections.observableArrayList(ThermalWidth.WIDTH_58MM, ThermalWidth.WIDTH_80MM));
-        TextField staffDiscField = new TextField();
-        TextField returnLimitField = new TextField();
+        thermalWidthCombo.setValue(currentProfile.thermalReceiptWidth());
+
+        TextField termsField = new TextField(currentProfile.termsAndConditions());
+        termsField.setPromptText("Terms & conditions printed on receipts");
+        termsField.setPrefWidth(350);
+
+        TextField staffDiscField = new TextField(currentProfile.staffMaxDiscountPercent().toPlainString());
+        TextField returnLimitField = new TextField(String.valueOf(currentProfile.staffReturnApprovalLimitPaise()));
         CheckBox negativeStockCheck = new CheckBox("Allow Negative Stock");
-        TextField backupRetentionField = new TextField();
-        TextField backupFolderField = new TextField();
-        backupFolderField.setPrefWidth(300);
+        negativeStockCheck.setSelected(currentProfile.allowNegativeStock());
+
+        TextField backupRetentionField = new TextField(String.valueOf(currentProfile.backupRetentionCount()));
+
+        TextField backupFolderField = new TextField(currentProfile.backupExternalDirectory());
+        backupFolderField.setPrefWidth(280);
+        Button browseBackupBtn = new Button("Browse...");
+        browseBackupBtn.setOnAction(e -> {
+            DirectoryChooser dc = new DirectoryChooser();
+            dc.setTitle("Select External Backup Directory");
+            File f = dc.showDialog(box.getScene().getWindow());
+            if (f != null) {
+                backupFolderField.setText(f.getAbsolutePath());
+            }
+        });
+        HBox backupFolderRow = new HBox(8, backupFolderField, browseBackupBtn);
+        backupFolderRow.setAlignment(Pos.CENTER_LEFT);
 
         ComboBox<AppLocale> languageCombo = new ComboBox<>(FXCollections.observableArrayList(AppLocale.ENGLISH, AppLocale.HINDI));
         languageCombo.setValue(context.getI18nService().getCurrentLocale());
 
-        ShopProfile current = context.getShopSettingsService().getShopProfile();
-        shopNameField.setText(current.shopName());
-        shopPhoneField.setText(current.shopPhone());
-        shopGstinField.setText(current.shopGstin());
-        thermalWidthCombo.setValue(current.thermalReceiptWidth());
-        staffDiscField.setText(current.staffMaxDiscountPercent().toPlainString());
-        returnLimitField.setText(String.valueOf(current.staffReturnApprovalLimitPaise()));
-        negativeStockCheck.setSelected(current.allowNegativeStock());
-        backupRetentionField.setText(String.valueOf(current.backupRetentionCount()));
-        backupFolderField.setText(current.backupExternalDirectory());
+        int r3 = 0;
+        grid3.add(new Label("Thermal Printer Width:"), 0, r3);
+        grid3.add(thermalWidthCombo, 1, r3++);
 
-        Button saveSettingsBtn = new Button("Save Settings");
-        saveSettingsBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 4;");
+        grid3.add(new Label("Terms & Conditions:"), 0, r3);
+        grid3.add(termsField, 1, r3++);
+
+        grid3.add(new Label("Staff Max Discount %:"), 0, r3);
+        grid3.add(staffDiscField, 1, r3++);
+
+        grid3.add(new Label("Staff Return Approval Limit (paise):"), 0, r3);
+        grid3.add(returnLimitField, 1, r3++);
+
+        grid3.add(new Label("Stock Policy:"), 0, r3);
+        grid3.add(negativeStockCheck, 1, r3++);
+
+        grid3.add(new Label("Backup Retention Count:"), 0, r3);
+        grid3.add(backupRetentionField, 1, r3++);
+
+        grid3.add(new Label("External Backup Directory:"), 0, r3);
+        grid3.add(backupFolderRow, 1, r3++);
+
+        grid3.add(new Label("Language / भाषा:"), 0, r3);
+        grid3.add(languageCombo, 1, r3++);
+
+        card3.getChildren().addAll(card3Title, grid3);
+
+        // -------------------------------------------------------------
+        // SAVE BUTTON & ACTION ROW
+        // -------------------------------------------------------------
+        HBox actionRow = new HBox(15);
+        actionRow.setAlignment(Pos.CENTER_LEFT);
+
+        Button saveSettingsBtn = new Button("💾 Save All Shop & Billing Settings");
+        saveSettingsBtn.setStyle("-fx-background-color: #2563eb; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px; -fx-padding: 10 24; -fx-background-radius: 6; -fx-cursor: hand;");
         if (!context.isOwner()) {
             saveSettingsBtn.setDisable(true);
         }
@@ -125,58 +333,79 @@ public class SettingsAndAdminScreen {
         saveSettingsBtn.setOnAction(e -> {
             try {
                 long userId = context.getCurrentUser() != null ? context.getCurrentUser().id() : 1L;
+
+                String firmName = shopNameField.getText().trim();
+                if (firmName.isEmpty()) {
+                    new Alert(Alert.AlertType.ERROR, "Firm / Shop Name cannot be blank", ButtonType.OK).showAndWait();
+                    return;
+                }
+
+                String selectedState = stateCombo.getValue();
+                String stateName = "Rajasthan";
+                String stateCode = "08";
+                if (selectedState != null && selectedState.contains("(") && selectedState.contains(")")) {
+                    stateName = selectedState.substring(0, selectedState.indexOf('(')).trim();
+                    stateCode = selectedState.substring(selectedState.indexOf('(') + 1, selectedState.indexOf(')')).trim();
+                }
+
+                // 1. Save billing details
+                ShopSettingsService.ShopBillingDetails updatedBilling = new ShopSettingsService.ShopBillingDetails(
+                        firmName,
+                        shopTaglineField.getText().trim(),
+                        shopAddressField.getText().trim(),
+                        shopPhoneField.getText().trim(),
+                        shopEmailField.getText().trim(),
+                        shopGstinField.getText().trim(),
+                        stateName,
+                        stateCode,
+                        shopPanField.getText().trim(),
+                        shopBankNameField.getText().trim(),
+                        shopAccountNoField.getText().trim(),
+                        shopIfscField.getText().trim(),
+                        shopBranchField.getText().trim(),
+                        shopUpiIdField.getText().trim()
+                );
+                context.getShopSettingsService().updateShopBillingDetails(userId, updatedBilling);
+
+                // 2. Save profile settings
                 BigDecimal disc = new BigDecimal(staffDiscField.getText().trim());
                 long retLimit = Long.parseLong(returnLimitField.getText().trim());
                 int retention = Integer.parseInt(backupRetentionField.getText().trim());
 
-                ShopProfile updated = new ShopProfile(
-                        shopNameField.getText().trim(),
-                        current.shopTagline(),
-                        current.shopAddress(),
+                ShopProfile updatedProfile = new ShopProfile(
+                        firmName,
+                        shopTaglineField.getText().trim(),
+                        shopAddressField.getText().trim(),
                         shopPhoneField.getText().trim(),
                         shopGstinField.getText().trim(),
                         thermalWidthCombo.getValue(),
-                        current.termsAndConditions(),
+                        termsField.getText().trim(),
                         disc,
-                        current.staffCanRegisterSale(),
+                        currentProfile.staffCanRegisterSale(),
                         retLimit,
                         negativeStockCheck.isSelected(),
                         retention,
                         backupFolderField.getText().trim()
                 );
+                context.getShopSettingsService().updateShopProfile(userId, updatedProfile);
 
-                context.getShopSettingsService().updateShopProfile(userId, updated);
+                // 3. Save locale
                 context.getI18nService().setLocale(languageCombo.getValue(), userId);
-                new Alert(Alert.AlertType.INFORMATION, "Settings saved successfully!", ButtonType.OK).showAndWait();
+
+                new Alert(Alert.AlertType.INFORMATION, "Settings saved successfully!\nAll new bills will print with this firm name, GST, bank & QR code.", ButtonType.OK).showAndWait();
             } catch (Exception ex) {
                 new Alert(Alert.AlertType.ERROR, "Failed to save settings: " + ex.getMessage(), ButtonType.OK).showAndWait();
             }
         });
 
-        grid.add(new Label("Shop Name:"), 0, 0);
-        grid.add(shopNameField, 1, 0);
-        grid.add(new Label("Shop Phone:"), 0, 1);
-        grid.add(shopPhoneField, 1, 1);
-        grid.add(new Label("Shop GSTIN:"), 0, 2);
-        grid.add(shopGstinField, 1, 2);
-        grid.add(new Label("Thermal Printer Width:"), 0, 3);
-        grid.add(thermalWidthCombo, 1, 3);
-        grid.add(new Label("Staff Max Discount %:"), 0, 4);
-        grid.add(staffDiscField, 1, 4);
-        grid.add(new Label("Staff Return Approval Limit (paise):"), 0, 5);
-        grid.add(returnLimitField, 1, 5);
-        grid.add(new Label("Stock Policy:"), 0, 6);
-        grid.add(negativeStockCheck, 1, 6);
-        grid.add(new Label("Backup Retention Count:"), 0, 7);
-        grid.add(backupRetentionField, 1, 7);
-        grid.add(new Label("External Backup Directory:"), 0, 8);
-        grid.add(backupFolderField, 1, 8);
-        grid.add(new Label("Language / भाषा:"), 0, 9);
-        grid.add(languageCombo, 1, 9);
-        grid.add(saveSettingsBtn, 1, 10);
+        actionRow.getChildren().add(saveSettingsBtn);
 
-        box.getChildren().addAll(grid);
-        return box;
+        box.getChildren().addAll(headerBanner, card1, card2, card3, actionRow);
+
+        ScrollPane scrollPane = new ScrollPane(box);
+        scrollPane.setFitToWidth(true);
+        scrollPane.setStyle("-fx-background: #f8fafc; -fx-background-color: transparent;");
+        return scrollPane;
     }
 
     private VBox buildUsersTab() {

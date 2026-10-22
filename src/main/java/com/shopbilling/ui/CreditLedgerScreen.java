@@ -27,9 +27,16 @@ public class CreditLedgerScreen {
     private final ObservableList<SupplierPayableSummary> supplierData = FXCollections.observableArrayList();
     private final TableView<SupplierPayableSummary> supplierTable = new TableView<>(supplierData);
 
+    private final int initialTabIndex;
+
     public CreditLedgerScreen(ScreenManager screenManager) {
+        this(screenManager, 0);
+    }
+
+    public CreditLedgerScreen(ScreenManager screenManager, int initialTabIndex) {
         this.screenManager = Objects.requireNonNull(screenManager, "ScreenManager cannot be null");
         this.context = screenManager.getContext();
+        this.initialTabIndex = initialTabIndex;
     }
 
     public Parent getView() {
@@ -60,6 +67,9 @@ public class CreditLedgerScreen {
         Tab suppTab = new Tab("Supplier Payables", buildSupplierTab());
 
         tabPane.getTabs().addAll(custTab, suppTab);
+        if (initialTabIndex > 0 && initialTabIndex < tabPane.getTabs().size()) {
+            tabPane.getSelectionModel().select(initialTabIndex);
+        }
         root.setCenter(tabPane);
 
         loadCustomerData();
@@ -71,6 +81,9 @@ public class CreditLedgerScreen {
     private VBox buildCustomerTab() {
         VBox box = new VBox(15);
         box.setPadding(new Insets(15, 25, 15, 25));
+
+        Label infoBanner = new Label("Customer Receivables (Money to Receive): Outstanding dues owed to your shop by customers from counter sales on credit.");
+        infoBanner.setStyle("-fx-background-color: #eff6ff; -fx-text-fill: #1e40af; -fx-padding: 8 12; -fx-background-radius: 6; -fx-border-color: #bfdbfe; -fx-border-radius: 6; -fx-font-size: 12px;");
 
         HBox actionRow = new HBox(15);
         actionRow.setAlignment(Pos.CENTER_LEFT);
@@ -92,7 +105,7 @@ public class CreditLedgerScreen {
         setupCustomerTable();
         VBox.setVgrow(customerTable, Priority.ALWAYS);
 
-        box.getChildren().addAll(actionRow, customerTable);
+        box.getChildren().addAll(infoBanner, actionRow, customerTable);
         return box;
     }
 
@@ -141,6 +154,9 @@ public class CreditLedgerScreen {
         VBox box = new VBox(15);
         box.setPadding(new Insets(15, 25, 15, 25));
 
+        Label infoBanner = new Label("Supplier Payables (Money to Pay): Outstanding balance your shop owes to distributors/wholesalers for stock purchases on credit.");
+        infoBanner.setStyle("-fx-background-color: #fefce8; -fx-text-fill: #854d0e; -fx-padding: 8 12; -fx-background-radius: 6; -fx-border-color: #fef08a; -fx-border-radius: 6; -fx-font-size: 12px;");
+
         HBox actionRow = new HBox(15);
         actionRow.setAlignment(Pos.CENTER_LEFT);
 
@@ -161,7 +177,7 @@ public class CreditLedgerScreen {
         setupSupplierTable();
         VBox.setVgrow(supplierTable, Priority.ALWAYS);
 
-        box.getChildren().addAll(actionRow, supplierTable);
+        box.getChildren().addAll(infoBanner, actionRow, supplierTable);
         return box;
     }
 
@@ -181,6 +197,21 @@ public class CreditLedgerScreen {
         TableColumn<SupplierPayableSummary, String> colBalance = new TableColumn<>("Outstanding Payable (Rs)");
         colBalance.setCellValueFactory(d -> new SimpleStringProperty(d.getValue().currentPayable().toRupeesString()));
         colBalance.setPrefWidth(180);
+        colBalance.setCellFactory(column -> new TableCell<>() {
+            @Override
+            protected void updateItem(String item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                    setStyle("");
+                } else {
+                    setText(item);
+                    if (!"0.00".equals(item)) {
+                        setStyle("-fx-text-fill: #dc2626; -fx-font-weight: bold;");
+                    }
+                }
+            }
+        });
 
         supplierTable.getColumns().addAll(colName, colPhone, colContact, colBalance);
     }

@@ -1,0 +1,31 @@
+=================================================================
+ UdhyamSetu - Diagnostics and Support Report (PRD FR-50)
+=================================================================
+
+Application Version: 0.1.0-SNAPSHOT
+Export Timestamp:    2026-10-22T19:33:57.289115742 (IST)
+
+--- ENVIRONMENT & OPERATING SYSTEM ---
+OS Name:             Linux
+OS Version:          7.0.0-38-generic
+OS Architecture:     amd64
+User Name:           vivek
+User Home:           /home/vivek
+Working Directory:   /home/vivek/Projects/UdhyamSetu
+
+--- JAVA RUNTIME (JVM) ---
+Java Version:        25.0.4.1
+Java Vendor:         Ubuntu
+Java Home:           /usr/lib/jvm/java-25-openjdk-amd64
+JVM Memory:          Max=1768MB, Total=59MB, Free=19MB, Used=40MB
+
+--- DATABASE HEALTH & STORAGE ---
+Database Path:       /home/vivek/.shopbilling/data/shop_billing.db
+Database Size:       421888 bytes (0.40 MB)
+
+--- BACKUP STATUS (FR-3, FR-46) ---
+Last Backup Path:    /home/vivek/.shopbilling/data/backups/udhyamsetu_backup_20261022_193348_scheduled.db
+Last Backup Type:    SCHEDULED
+Last Backup Date:    2026-10-22 19:33:48
+Last Backup Size:    421888 bytes
+Older than 24h:      NO (HEALTHY)

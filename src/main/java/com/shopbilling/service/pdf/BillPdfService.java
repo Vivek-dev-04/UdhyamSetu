@@ -5,6 +5,7 @@ import com.lowagie.text.DocumentException;
 import com.lowagie.text.Element;
 import com.lowagie.text.Font;
 import com.lowagie.text.FontFactory;
+import com.lowagie.text.Image;
 import com.lowagie.text.PageSize;
 import com.lowagie.text.Paragraph;
 import com.lowagie.text.Phrase;
@@ -30,39 +31,63 @@ import com.shopbilling.model.ProductVariant;
 import com.shopbilling.model.Sale;
 import com.shopbilling.model.SaleItem;
 import com.shopbilling.service.EntityNotFoundException;
+import com.shopbilling.service.pdf.qrcode.QrCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.awt.Color;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Service for rendering official A4 PDF invoices using OpenPDF (PRD Section 7.3, FR-13).
- * Produces clean, professional, publication-quality A4 invoices formatted for Indian retail.
+ * Service for rendering authentic Indian GST Tax Invoices formatted for A4 print.
+ * Implements the standard Tally/GST billing format with:
+ * - Detailed seller company information (GSTIN, State Code, Contact, Email)
+ * - Buyer B2B / B2C "Billed to" section with GSTIN and State
+ * - Invoice metadata grid (Invoice No, Date, Terms of payment, Delivery note)
+ * - HSN/SAC line items table with Rate, per, and Amount
+ * - Embedded UPI dynamic payment QR Code ("Scan to pay") for instant customer UPI settlement
+ * - HSN/SAC Tax breakdown summary table (Taxable, CGST, SGST, Total Tax)
+ * - Amount in words, Company PAN, Bank Details, Declaration, and Authorised Signatory.
  */
 public class BillPdfService {
 
     private static final Logger logger = LoggerFactory.getLogger(BillPdfService.class);
 
-    private static final Font TITLE_FONT = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 15, new Color(30, 41, 59));
-    private static final Font SUBTITLE_FONT = FontFactory.getFont(FontFactory.HELVETICA, 8.5f, new Color(71, 85, 105));
-    private static final Font SECTION_HEADER_FONT = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9, new Color(15, 23, 42));
-    private static final Font TABLE_HEADER_FONT = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8.5f, new Color(255, 255, 255));
-    private static final Font BOLD_FONT = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8.5f, new Color(15, 23, 42));
-    private static final Font BODY_FONT = FontFactory.getFont(FontFactory.HELVETICA, 8.5f, new Color(30, 41, 59));
-    private static final Font SMALL_FONT = FontFactory.getFont(FontFactory.HELVETICA, 7.5f, new Color(100, 116, 139));
-    private static final Font TOTAL_FONT = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11, new Color(15, 23, 42));
+    // Color Palette
+    private static final Color COLOR_PRIMARY = new Color(20, 24, 33);
+    private static final Color COLOR_BORDER = new Color(110, 115, 125);
+    private static final Color COLOR_LIGHT_BORDER = new Color(180, 185, 195);
+    private static final Color COLOR_BG_HEADER = new Color(243, 244, 246);
 
-    private static final Color PRIMARY_COLOR = new Color(30, 41, 59);       // Slate 800
-    private static final Color HEADER_BG_COLOR = new Color(51, 65, 85);     // Slate 700
-    private static final Color LIGHT_BG_COLOR = new Color(248, 250, 252);   // Slate 50
-    private static final Color BORDER_COLOR = new Color(226, 232, 240);     // Slate 200
+    // Typography
+    private static final Font FONT_INV_TITLE = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, COLOR_PRIMARY);
+    private static final Font FONT_HEADER_MOTTO = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 7, COLOR_PRIMARY);
+    private static final Font FONT_HEADER_RIGHT = FontFactory.getFont(FontFactory.HELVETICA_OBLIQUE, 7.5f, COLOR_PRIMARY);
+
+    private static final Font FONT_SHOP_NAME = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10, COLOR_PRIMARY);
+    private static final Font FONT_SHOP_DETAILS = FontFactory.getFont(FontFactory.HELVETICA, 7.5f, COLOR_PRIMARY);
+    private static final Font FONT_SHOP_BOLD = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 7.5f, COLOR_PRIMARY);
+
+    private static final Font FONT_META_LABEL = FontFactory.getFont(FontFactory.HELVETICA, 7.0f, new Color(75, 85, 99));
+    private static final Font FONT_META_VALUE = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8.0f, COLOR_PRIMARY);
+
+    private static final Font FONT_TH = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 7.5f, COLOR_PRIMARY);
+    private static final Font FONT_TD = FontFactory.getFont(FontFactory.HELVETICA, 7.5f, COLOR_PRIMARY);
+    private static final Font FONT_TD_BOLD = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 7.5f, COLOR_PRIMARY);
+    private static final Font FONT_TINY = FontFactory.getFont(FontFactory.HELVETICA, 6.5f, COLOR_PRIMARY);
+    private static final Font FONT_TINY_BOLD = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 6.5f, COLOR_PRIMARY);
+
+    private static final Font FONT_SCAN_TO_PAY = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 7.5f, COLOR_PRIMARY);
 
     private final TransactionHelper transactionHelper;
     private final SaleRepository saleRepository;
@@ -119,28 +144,38 @@ public class BillPdfService {
         Objects.requireNonNull(model, "BillPrintModel cannot be null");
         Objects.requireNonNull(outputStream, "OutputStream cannot be null");
 
-        Document document = new Document(PageSize.A4, 32, 32, 32, 32);
+        // Margins: Left=18, Right=18, Top=18, Bottom=18 pt
+        Document document = new Document(PageSize.A4, 18, 18, 18, 18);
         try {
             PdfWriter.getInstance(document, outputStream);
             document.open();
 
-            // 1. Header: Shop Branding & Invoice Title
-            addShopHeader(document, model);
+            // 1. Top Title & Motto
+            addTopTitle(document);
 
-            // 2. Invoice Meta & Customer Info Box
-            addInvoiceMetaAndCustomerBox(document, model);
+            // 2. Seller Company & Metadata Box
+            addSellerAndMetadataBox(document, model);
 
-            // 3. Line Items Table
+            // 3. Buyer (Bill to) Box
+            addBuyerBox(document, model);
+
+            // 4. Line Items Table with Totals
             addLineItemsTable(document, model);
 
-            // 4. Totals, Amounts in Words & Payment Details
-            addTotalsAndPaymentDetails(document, model);
+            // 5. Amount in Words Box
+            addAmountInWordsBox(document, model);
 
-            // 5. Terms & Signatory Footer
-            addFooter(document);
+            // 6. QR Code ("Scan to pay") & Tax Breakdown Table
+            addQrCodeAndTaxBreakdown(document, model);
+
+            // 7. Footer: PAN, Bank Details, Declaration & Signatory
+            addBankAndSignatoryFooter(document, model);
+
+            // 8. Jurisdiction & Computer Generated Note
+            addJurisdictionNote(document, model);
 
             document.close();
-            logger.info("Rendered A4 invoice PDF for bill: {}", model.billNumber());
+            logger.info("Rendered GST Tax Invoice A4 PDF for bill: {}", model.billNumber());
         } catch (DocumentException e) {
             throw new RuntimeException("Failed to generate PDF invoice for bill " + model.billNumber(), e);
         }
@@ -162,19 +197,37 @@ public class BillPdfService {
                         c.name(),
                         c.phone(),
                         c.address(),
-                        c.customerType()
+                        c.customerType(),
+                        c.getGstin(),
+                        c.getStateName(),
+                        c.getStateCode()
                 )).orElseGet(BillPrintModel.CustomerInfo::walkIn);
             } else {
                 custInfo = BillPrintModel.CustomerInfo.walkIn();
             }
 
             // Shop info
-            String shopName = settingsRepository.getSettingOrDefault(conn, "SHOP_NAME", "SHREE GANESH ELECTRICALS");
-            String shopTagline = settingsRepository.getSettingOrDefault(conn, "SHOP_TAGLINE", "Dealers in Cables, Switches, Lighting & Industrial Electrical Goods");
-            String shopAddress = settingsRepository.getSettingOrDefault(conn, "SHOP_ADDRESS", "Station Road, Main Market, Opp. Town Hall");
-            String shopPhone = settingsRepository.getSettingOrDefault(conn, "SHOP_PHONE", "+91 98765 43210");
-            String shopGstin = settingsRepository.getSettingOrDefault(conn, "SHOP_GSTIN", "23AAAAA0000A1Z5");
-            BillPrintModel.ShopInfo shopInfo = new BillPrintModel.ShopInfo(shopName, shopTagline, shopAddress, shopPhone, shopGstin);
+            String shopName = settingsRepository.getSettingOrDefault(conn, "SHOP_NAME", "MAHESHWARI ELECTRICALS - (2025-27)");
+            String shopTagline = settingsRepository.getSettingOrDefault(conn, "SHOP_TAGLINE", "Chamaliwala Market, Opp. G.P.O., M.I. Road, Jaipur (RAJASTHAN)");
+            String shopAddress = settingsRepository.getSettingOrDefault(conn, "SHOP_ADDRESS", "Chamaliwala Market, Opp. G.P.O., M.I. Road, Jaipur (RAJASTHAN)");
+            String shopPhone = settingsRepository.getSettingOrDefault(conn, "SHOP_PHONE", "0141-2366620, 2371211 / MOB- 9829053822/9829053866");
+            String shopGstin = settingsRepository.getSettingOrDefault(conn, "SHOP_GSTIN", "08AACFM6417B1ZN");
+            String shopEmail = settingsRepository.getSettingOrDefault(conn, "SHOP_EMAIL", "Mecombines@rediffmail.Com");
+            String shopStateName = settingsRepository.getSettingOrDefault(conn, "SHOP_STATE_NAME", "Rajasthan");
+            String shopStateCode = settingsRepository.getSettingOrDefault(conn, "SHOP_STATE_CODE", "08");
+            String panDefault = (shopGstin.length() >= 12 ? shopGstin.substring(2, 12) : "AACFM6417B");
+            String shopPan = settingsRepository.getSettingOrDefault(conn, "SHOP_PAN", panDefault);
+            String shopBankName = settingsRepository.getSettingOrDefault(conn, "SHOP_BANK_NAME", "PUNJAB NATIONAL BANK");
+            String shopAccountNo = settingsRepository.getSettingOrDefault(conn, "SHOP_ACCOUNT_NO", "00615010000080");
+            String shopIfsc = settingsRepository.getSettingOrDefault(conn, "SHOP_IFSC", "PUNB0006110");
+            String shopBranch = settingsRepository.getSettingOrDefault(conn, "SHOP_BANK_BRANCH", "M.I. ROAD - JAIPUR");
+            String shopUpiId = settingsRepository.getSettingOrDefault(conn, "SHOP_UPI_ID", "9829053822@upi");
+
+            BillPrintModel.ShopInfo shopInfo = new BillPrintModel.ShopInfo(
+                    shopName, shopTagline, shopAddress, shopPhone, shopGstin,
+                    shopEmail, shopStateName, shopStateCode, shopPan,
+                    shopBankName, shopAccountNo, shopIfsc, shopBranch, shopUpiId
+            );
 
             // Line items
             List<BillPrintModel.BillLineItem> lineItems = new ArrayList<>();
@@ -196,7 +249,9 @@ public class BillPdfService {
                         item.quantity(),
                         item.unitPrice(),
                         item.lineDiscount(),
-                        item.lineTotal()
+                        item.lineTotal(),
+                        "85446020",
+                        18.0
                 ));
             }
 
@@ -206,7 +261,18 @@ public class BillPdfService {
                     .toList();
 
             String displayBillNo = sale.billNumber() != null ? sale.billNumber() : ("REG-" + sale.id());
-            String words = IndianNumberToWords.convertToWords(sale.totalAmount().getPaise() / 100);
+            String words = IndianNumberToWords.convertPaiseToInrWords(sale.totalAmount().getPaise());
+
+            // Build dynamic UPI QR payload
+            String upiAmount = String.format(Locale.US, "%.2f", sale.totalAmount().getPaise() / 100.0);
+            String upiQrPayload;
+            try {
+                String encShop = URLEncoder.encode(shopName, StandardCharsets.UTF_8).replace("+", "%20");
+                String encBill = URLEncoder.encode(displayBillNo, StandardCharsets.UTF_8).replace("+", "%20");
+                upiQrPayload = "upi://pay?pa=" + shopUpiId + "&pn=" + encShop + "&am=" + upiAmount + "&cu=INR&tn=Invoice%20" + encBill;
+            } catch (Exception e) {
+                upiQrPayload = "upi://pay?pa=" + shopUpiId + "&pn=Shop&am=" + upiAmount + "&cu=INR";
+            }
 
             return new BillPrintModel(
                     shopInfo,
@@ -221,252 +287,553 @@ public class BillPdfService {
                     words,
                     paymentInfos,
                     "Counter User #" + sale.createdByUserId(),
-                    null
+                    null,
+                    null,
+                    "Hand Delivery",
+                    "Jaipur",
+                    upiQrPayload
             );
         });
     }
 
-    private void addShopHeader(Document document, BillPrintModel model) throws DocumentException {
-        PdfPTable headerTable = new PdfPTable(2);
-        headerTable.setWidthPercentage(100);
-        headerTable.setWidths(new float[]{65, 35});
-        headerTable.setSpacingAfter(10);
+    // -------------------------------------------------------------
+    // PDF RENDERING SECTIONS
+    // -------------------------------------------------------------
 
-        // Left: Shop Name & Details
-        PdfPCell leftCell = new PdfPCell();
+    private void addTopTitle(Document document) throws DocumentException {
+        PdfPTable topTable = new PdfPTable(3);
+        topTable.setWidthPercentage(100);
+        topTable.setWidths(new float[]{25, 50, 25});
+        topTable.setSpacingAfter(3);
+
+        PdfPCell leftCell = new PdfPCell(new Phrase(""));
         leftCell.setBorder(Rectangle.NO_BORDER);
-        leftCell.addElement(new Paragraph(model.shop().name(), TITLE_FONT));
-        leftCell.addElement(new Paragraph(model.shop().tagline(), SUBTITLE_FONT));
-        leftCell.addElement(new Paragraph(model.shop().address() + " • Phone: " + model.shop().phone(), SUBTITLE_FONT));
-        if (model.shop().gstin() != null && !model.shop().gstin().isBlank()) {
-            leftCell.addElement(new Paragraph("GSTIN: " + model.shop().gstin(), SUBTITLE_FONT));
-        }
-        headerTable.addCell(leftCell);
+        topTable.addCell(leftCell);
 
-        // Right: TAX INVOICE banner & Bill Number
+        PdfPCell centerCell = new PdfPCell();
+        centerCell.setBorder(Rectangle.NO_BORDER);
+        centerCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+
+        Paragraph motto = new Paragraph("II JAI SHRI SHYAM II", FONT_HEADER_MOTTO);
+        motto.setAlignment(Element.ALIGN_CENTER);
+        centerCell.addElement(motto);
+
+        Paragraph title = new Paragraph("TAX INVOICE", FONT_INV_TITLE);
+        title.setAlignment(Element.ALIGN_CENTER);
+        centerCell.addElement(title);
+        topTable.addCell(centerCell);
+
         PdfPCell rightCell = new PdfPCell();
         rightCell.setBorder(Rectangle.NO_BORDER);
         rightCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        Paragraph orig = new Paragraph("(ORIGINAL FOR RECIPIENT)", FONT_HEADER_RIGHT);
+        orig.setAlignment(Element.ALIGN_RIGHT);
+        rightCell.addElement(orig);
+        topTable.addCell(rightCell);
 
-        Paragraph invoiceLabel = new Paragraph("TAX INVOICE / CASH MEMO", FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, PRIMARY_COLOR));
-        invoiceLabel.setAlignment(Element.ALIGN_RIGHT);
-        rightCell.addElement(invoiceLabel);
-
-        Paragraph billNo = new Paragraph("Bill No: " + model.billNumber(), FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10, PRIMARY_COLOR));
-        billNo.setAlignment(Element.ALIGN_RIGHT);
-        rightCell.addElement(billNo);
-
-        Paragraph datePara = new Paragraph("Date: " + model.billDate().format(DateTimeFormatter.ofPattern("dd-MMM-yyyy")), BODY_FONT);
-        datePara.setAlignment(Element.ALIGN_RIGHT);
-        rightCell.addElement(datePara);
-
-        Paragraph fyPara = new Paragraph("FY: " + model.financialYear(), SMALL_FONT);
-        fyPara.setAlignment(Element.ALIGN_RIGHT);
-        rightCell.addElement(fyPara);
-
-        headerTable.addCell(rightCell);
-        document.add(headerTable);
+        document.add(topTable);
     }
 
-    private void addInvoiceMetaAndCustomerBox(Document document, BillPrintModel model) throws DocumentException {
-        PdfPTable custTable = new PdfPTable(2);
-        custTable.setWidthPercentage(100);
-        custTable.setWidths(new float[]{55, 45});
-        custTable.setSpacingAfter(12);
+    private void addSellerAndMetadataBox(Document document, BillPrintModel model) throws DocumentException {
+        PdfPTable table = new PdfPTable(2);
+        table.setWidthPercentage(100);
+        table.setWidths(new float[]{55, 45});
 
-        // Billed To Box
-        PdfPCell billedToCell = new PdfPCell();
-        billedToCell.setBackgroundColor(LIGHT_BG_COLOR);
-        billedToCell.setBorderColor(BORDER_COLOR);
-        billedToCell.setPadding(8);
+        // Left Cell: Seller Details
+        PdfPCell sellerCell = new PdfPCell();
+        sellerCell.setBorder(Rectangle.BOX);
+        sellerCell.setBorderColor(COLOR_BORDER);
+        sellerCell.setPadding(5);
 
-        billedToCell.addElement(new Paragraph("BILLED TO:", SECTION_HEADER_FONT));
-        billedToCell.addElement(new Paragraph(model.customer().name(), BOLD_FONT));
-        if (model.customer().phone() != null && !model.customer().phone().isBlank()) {
-            billedToCell.addElement(new Paragraph("Phone: " + model.customer().phone(), BODY_FONT));
+        sellerCell.addElement(new Paragraph(model.shop().name(), FONT_SHOP_NAME));
+        sellerCell.addElement(new Paragraph(model.shop().address(), FONT_SHOP_DETAILS));
+        if (model.shop().phone() != null && !model.shop().phone().isBlank()) {
+            sellerCell.addElement(new Paragraph("CONTACT: " + model.shop().phone(), FONT_SHOP_DETAILS));
         }
+        if (model.shop().email() != null && !model.shop().email().isBlank()) {
+            sellerCell.addElement(new Paragraph("EMAIL- " + model.shop().email(), FONT_SHOP_DETAILS));
+        }
+        sellerCell.addElement(new Paragraph("GSTIN/UIN : " + (model.shop().gstin() != null ? model.shop().gstin() : ""), FONT_SHOP_BOLD));
+        sellerCell.addElement(new Paragraph("State Name : " + model.shop().stateName() + ", Code : " + model.shop().stateCode(), FONT_SHOP_DETAILS));
+
+        table.addCell(sellerCell);
+
+        // Right Cell: Metadata Grid
+        PdfPCell metaGridCell = new PdfPCell();
+        metaGridCell.setBorder(Rectangle.BOX);
+        metaGridCell.setBorderColor(COLOR_BORDER);
+        metaGridCell.setPadding(0);
+
+        PdfPTable subMeta = new PdfPTable(2);
+        subMeta.setWidthPercentage(100);
+        subMeta.setWidths(new float[]{50, 50});
+
+        String dtStr = model.billDate().format(DateTimeFormatter.ofPattern("dd-MMM-yy"));
+
+        // Row 1: Invoice No | Dated
+        addMetaPair(subMeta, "Invoice No.", model.billNumber(), "Dated", dtStr);
+
+        // Row 2: Delivery Note | Mode/Terms of Payment
+        String payMode = model.payments().isEmpty() ? "Cash / Spot" : model.payments().get(0).mode().toString();
+        addMetaPair(subMeta, "Delivery Note", model.deliveryNote() != null ? model.deliveryNote() : "", "Mode/Terms of Payment", payMode);
+
+        // Row 3: Reference No. & Date | Other References
+        addMetaPair(subMeta, "Reference No. & Date.", model.billNumber() + " dt. " + dtStr, "Other References", "");
+
+        // Row 4: Buyer's Order No. | Dated
+        addMetaPair(subMeta, "Buyer's Order No.", "verbal", "Dated", dtStr);
+
+        // Row 5: Dispatched through | Destination
+        addMetaPair(subMeta, "Dispatched through", model.dispatchedThrough() != null ? model.dispatchedThrough() : "Hand Delivery",
+                    "Destination", model.destination() != null ? model.destination() : "Local");
+
+        // Row 6: Terms of Delivery
+        PdfPCell termsCell = new PdfPCell();
+        termsCell.setColspan(2);
+        termsCell.setBorder(Rectangle.TOP);
+        termsCell.setBorderColor(COLOR_LIGHT_BORDER);
+        termsCell.setPadding(2);
+        termsCell.addElement(new Paragraph("Terms of Delivery", FONT_META_LABEL));
+        termsCell.addElement(new Paragraph("Immediate Handover / Ex-Warehouse", FONT_META_VALUE));
+        subMeta.addCell(termsCell);
+
+        metaGridCell.addElement(subMeta);
+        table.addCell(metaGridCell);
+
+        document.add(table);
+    }
+
+    private void addBuyerBox(Document document, BillPrintModel model) throws DocumentException {
+        PdfPTable table = new PdfPTable(1);
+        table.setWidthPercentage(100);
+
+        PdfPCell buyerCell = new PdfPCell();
+        buyerCell.setBorder(Rectangle.LEFT | Rectangle.RIGHT | Rectangle.BOTTOM);
+        buyerCell.setBorderColor(COLOR_BORDER);
+        buyerCell.setPadding(5);
+
+        buyerCell.addElement(new Paragraph("Buyer (Bill to)", FONT_META_LABEL));
+        buyerCell.addElement(new Paragraph(model.customer().name(), FONT_SHOP_NAME));
+
         if (model.customer().address() != null && !model.customer().address().isBlank()) {
-            billedToCell.addElement(new Paragraph("Address: " + model.customer().address(), BODY_FONT));
+            buyerCell.addElement(new Paragraph(model.customer().address(), FONT_SHOP_DETAILS));
         }
-        billedToCell.addElement(new Paragraph("Customer Type: " + model.customer().customerType(), SMALL_FONT));
-        custTable.addCell(billedToCell);
 
-        // Invoice Meta Box
-        PdfPCell metaCell = new PdfPCell();
-        metaCell.setBackgroundColor(LIGHT_BG_COLOR);
-        metaCell.setBorderColor(BORDER_COLOR);
-        metaCell.setPadding(8);
+        String custGstin = model.customer().gstin();
+        if (custGstin != null && !custGstin.isBlank()) {
+            buyerCell.addElement(new Paragraph("GSTIN/UIN   : " + custGstin, FONT_SHOP_BOLD));
+        } else {
+            buyerCell.addElement(new Paragraph("GSTIN/UIN   : Unregistered / Consumer", FONT_SHOP_DETAILS));
+        }
 
-        metaCell.addElement(new Paragraph("TRANSACTION DETAILS:", SECTION_HEADER_FONT));
-        metaCell.addElement(new Paragraph("Cashier: " + model.cashierName(), BODY_FONT));
-        metaCell.addElement(new Paragraph("Payment Status: " + (model.totalAmount().isZero() ? "NIL" : "SETTLED"), BODY_FONT));
-        metaCell.addElement(new Paragraph("State: Madhya Pradesh (Code 23)", SMALL_FONT));
-        metaCell.addElement(new Paragraph("Place of Supply: Within State", SMALL_FONT));
-        custTable.addCell(metaCell);
+        String stateName = model.customer().stateName() != null ? model.customer().stateName() : "Rajasthan";
+        String stateCode = model.customer().stateCode() != null ? model.customer().stateCode() : "08";
+        buyerCell.addElement(new Paragraph("State Name  : " + stateName + ", Code : " + stateCode, FONT_SHOP_DETAILS));
 
-        document.add(custTable);
+        if (model.customer().phone() != null && !model.customer().phone().isBlank()) {
+            buyerCell.addElement(new Paragraph("Contact     : " + model.customer().phone(), FONT_SHOP_DETAILS));
+        }
+
+        table.addCell(buyerCell);
+        document.add(table);
     }
 
     private void addLineItemsTable(Document document, BillPrintModel model) throws DocumentException {
         PdfPTable table = new PdfPTable(7);
         table.setWidthPercentage(100);
-        table.setWidths(new float[]{6, 38, 12, 12, 14, 10, 14});
-        table.setSpacingAfter(10);
+        table.setWidths(new float[]{5f, 44f, 13f, 12f, 12f, 6f, 14f});
 
-        // Table Header
-        addTableHeaderCell(table, "#");
-        addTableHeaderCell(table, "Item Description");
-        addTableHeaderCell(table, "Brand");
-        addTableHeaderCell(table, "Qty");
-        addTableHeaderCell(table, "Rate (₹)");
-        addTableHeaderCell(table, "Disc (₹)");
-        addTableHeaderCell(table, "Total (₹)");
+        // Headers
+        addTh(table, "SI\nNo.", Element.ALIGN_CENTER);
+        addTh(table, "Description of Goods", Element.ALIGN_LEFT);
+        addTh(table, "HSN/SAC", Element.ALIGN_CENTER);
+        addTh(table, "Quantity", Element.ALIGN_RIGHT);
+        addTh(table, "Rate", Element.ALIGN_RIGHT);
+        addTh(table, "per", Element.ALIGN_CENTER);
+        addTh(table, "Amount", Element.ALIGN_RIGHT);
 
-        // Table Rows
-        int count = 1;
+        // Rows
+        double totalQty = 0;
         for (BillPrintModel.BillLineItem item : model.items()) {
-            Color rowBg = (count % 2 == 0) ? LIGHT_BG_COLOR : Color.WHITE;
-
-            addCell(table, String.valueOf(item.serialNo()), Element.ALIGN_CENTER, BODY_FONT, rowBg);
+            addTd(table, String.valueOf(item.serialNo()), Element.ALIGN_CENTER, FONT_TD, false);
 
             String desc = item.productName();
             if (item.variantName() != null && !item.variantName().isBlank() && !item.variantName().equalsIgnoreCase("Standard")) {
-                desc += " (" + item.variantName() + ")";
+                desc += " " + item.variantName();
             }
-            addCell(table, desc, Element.ALIGN_LEFT, BODY_FONT, rowBg);
-            addCell(table, item.brandName(), Element.ALIGN_LEFT, BODY_FONT, rowBg);
+            if (item.brandName() != null && !item.brandName().isBlank()) {
+                desc += " -" + item.brandName();
+            }
+            addTd(table, desc, Element.ALIGN_LEFT, FONT_TD_BOLD, false);
+
+            addTd(table, item.hsnSac() != null ? item.hsnSac() : "85446020", Element.ALIGN_CENTER, FONT_TD, false);
 
             String qtyStr = item.quantity().toDisplayString() + " " + item.unitCode();
-            addCell(table, qtyStr, Element.ALIGN_RIGHT, BODY_FONT, rowBg);
-            addCell(table, item.unitPrice().toRupeesString(), Element.ALIGN_RIGHT, BODY_FONT, rowBg);
-            addCell(table, item.lineDiscount().isPositive() ? item.lineDiscount().toRupeesString() : "-", Element.ALIGN_RIGHT, BODY_FONT, rowBg);
-            addCell(table, item.lineTotal().toRupeesString(), Element.ALIGN_RIGHT, BOLD_FONT, rowBg);
+            addTd(table, qtyStr, Element.ALIGN_RIGHT, FONT_TD, false);
+            totalQty += item.quantity().getScaledValue() / 1000.0;
 
-            count++;
+            addTd(table, item.unitPrice().toRupeesString(), Element.ALIGN_RIGHT, FONT_TD, false);
+            addTd(table, item.unitCode(), Element.ALIGN_CENTER, FONT_TD, false);
+            addTd(table, item.lineTotal().toRupeesString(), Element.ALIGN_RIGHT, FONT_TD_BOLD, false);
         }
+
+        // Subtotal and adjustment rows
+        long totalPaise = model.totalAmount().getPaise();
+        long subtotalPaise = model.subtotal().getPaise();
+        long discountPaise = model.discount().getPaise();
+        long netAfterDiscount = Math.max(0, subtotalPaise - discountPaise);
+
+        if (totalPaise > netAfterDiscount) {
+            // Case 1: Exclusive rates (taxes are added on top of subtotal, matching B2B photo)
+            addSummaryLine(table, "", "Subtotal", "", "", "", "", Money.ofPaise(subtotalPaise).toRupeesString());
+
+            if (model.discount().isPositive()) {
+                addSummaryLine(table, "Less :", "DISCOUNT / REBATE", "", "", "", "", "(-) " + model.discount().toRupeesString());
+            }
+
+            long addedTax = totalPaise - netAfterDiscount;
+            long halfTax = addedTax / 2;
+            long roundOff = totalPaise - (netAfterDiscount + halfTax * 2);
+
+            addSummaryLine(table, "", "CGST (9%)", "", "", "", "", Money.ofPaise(halfTax).toRupeesString());
+            addSummaryLine(table, "", "SGST (9%)", "", "", "", "", Money.ofPaise(halfTax).toRupeesString());
+
+            if (roundOff != 0) {
+                String roSign = roundOff < 0 ? "(-) " : "";
+                addSummaryLine(table, "Less :", "ROUND OFF", "", "", "", "", roSign + Money.ofPaise(Math.abs(roundOff)).toRupeesString());
+            }
+        } else {
+            // Case 2: Standard tax-inclusive retail rates
+            addSummaryLine(table, "", "Subtotal", "", "", "", "", Money.ofPaise(subtotalPaise).toRupeesString());
+            if (model.discount().isPositive()) {
+                addSummaryLine(table, "Less :", "DISCOUNT / REBATE", "", "", "", "", "(-) " + model.discount().toRupeesString());
+            }
+        }
+
+        // Total Row
+        PdfPCell totalLabelCell = new PdfPCell(new Phrase("Total", FONT_TH));
+        totalLabelCell.setColspan(3);
+        totalLabelCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        totalLabelCell.setPadding(4);
+        totalLabelCell.setBorder(Rectangle.TOP | Rectangle.BOTTOM);
+        totalLabelCell.setBorderColor(COLOR_BORDER);
+        table.addCell(totalLabelCell);
+
+        PdfPCell totalQtyCell = new PdfPCell(new Phrase(String.format(Locale.US, "%.3f", totalQty), FONT_TH));
+        totalQtyCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        totalQtyCell.setPadding(4);
+        totalQtyCell.setBorder(Rectangle.TOP | Rectangle.BOTTOM);
+        totalQtyCell.setBorderColor(COLOR_BORDER);
+        table.addCell(totalQtyCell);
+
+        PdfPCell blankCell = new PdfPCell(new Phrase(""));
+        blankCell.setColspan(2);
+        blankCell.setBorder(Rectangle.TOP | Rectangle.BOTTOM);
+        blankCell.setBorderColor(COLOR_BORDER);
+        table.addCell(blankCell);
+
+        PdfPCell totalAmtCell = new PdfPCell(new Phrase("₹ " + model.totalAmount().toRupeesString(), FONT_TH));
+        totalAmtCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        totalAmtCell.setPadding(4);
+        totalAmtCell.setBorder(Rectangle.TOP | Rectangle.BOTTOM);
+        totalAmtCell.setBorderColor(COLOR_BORDER);
+        table.addCell(totalAmtCell);
 
         document.add(table);
     }
 
-    private void addTotalsAndPaymentDetails(Document document, BillPrintModel model) throws DocumentException {
-        PdfPTable summaryTable = new PdfPTable(2);
-        summaryTable.setWidthPercentage(100);
-        summaryTable.setWidths(new float[]{60, 40});
-        summaryTable.setSpacingAfter(12);
+    private void addAmountInWordsBox(Document document, BillPrintModel model) throws DocumentException {
+        PdfPTable table = new PdfPTable(2);
+        table.setWidthPercentage(100);
+        table.setWidths(new float[]{85, 15});
 
-        // Left Cell: Amount in Words & Payment Breakdown
         PdfPCell leftCell = new PdfPCell();
-        leftCell.setBorderColor(BORDER_COLOR);
-        leftCell.setPadding(8);
+        leftCell.setBorder(Rectangle.LEFT | Rectangle.BOTTOM);
+        leftCell.setBorderColor(COLOR_BORDER);
+        leftCell.setPadding(4);
 
-        leftCell.addElement(new Paragraph("AMOUNT IN WORDS:", SECTION_HEADER_FONT));
-        leftCell.addElement(new Paragraph(model.amountInWords(), BOLD_FONT));
+        leftCell.addElement(new Paragraph("Amount Chargeable (in words)", FONT_META_LABEL));
+        leftCell.addElement(new Paragraph(model.amountInWords(), FONT_TD_BOLD));
+        table.addCell(leftCell);
 
-        Paragraph sep = new Paragraph(" ");
-        sep.setSpacingAfter(4);
-        leftCell.addElement(sep);
-
-        leftCell.addElement(new Paragraph("PAYMENT BREAKDOWN:", SECTION_HEADER_FONT));
-        for (BillPrintModel.BillPaymentInfo p : model.payments()) {
-            String pStr = "• " + p.mode() + ": ₹" + p.amount().toRupeesString();
-            if (p.referenceNumber() != null && !p.referenceNumber().isBlank()) {
-                pStr += " [Ref: " + p.referenceNumber() + "]";
-            }
-            leftCell.addElement(new Paragraph(pStr, BODY_FONT));
-        }
-
-        summaryTable.addCell(leftCell);
-
-        // Right Cell: Subtotal, Discount, Net Payable
         PdfPCell rightCell = new PdfPCell();
-        rightCell.setBorderColor(BORDER_COLOR);
-        rightCell.setPadding(8);
+        rightCell.setBorder(Rectangle.RIGHT | Rectangle.BOTTOM);
+        rightCell.setBorderColor(COLOR_BORDER);
+        rightCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
+        rightCell.setPadding(4);
 
-        PdfPTable numTable = new PdfPTable(2);
-        numTable.setWidthPercentage(100);
-        numTable.setWidths(new float[]{55, 45});
+        Paragraph eoe = new Paragraph("E. & O.E", FONT_TD_BOLD);
+        eoe.setAlignment(Element.ALIGN_RIGHT);
+        rightCell.addElement(eoe);
+        table.addCell(rightCell);
 
-        addSummaryRow(numTable, "Subtotal:", "₹ " + model.subtotal().toRupeesString(), BODY_FONT, false);
-        if (model.discount().isPositive()) {
-            addSummaryRow(numTable, "Overall Discount:", "- ₹ " + model.discount().toRupeesString(), BODY_FONT, false);
+        document.add(table);
+    }
+
+    private void addQrCodeAndTaxBreakdown(Document document, BillPrintModel model) throws DocumentException {
+        PdfPTable table = new PdfPTable(2);
+        table.setWidthPercentage(100);
+        table.setWidths(new float[]{25, 75});
+
+        // Left Cell: Embedded Dynamic UPI QR Code ("Scan to pay")
+        PdfPCell qrCell = new PdfPCell();
+        qrCell.setBorder(Rectangle.LEFT | Rectangle.BOTTOM | Rectangle.RIGHT);
+        qrCell.setBorderColor(COLOR_BORDER);
+        qrCell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        qrCell.setPadding(4);
+
+        try {
+            String upiPayload = model.upiQrPayload();
+            if (upiPayload == null || upiPayload.isBlank()) {
+                String shopUpi = model.shop().upiId() != null && !model.shop().upiId().isBlank() ? model.shop().upiId() : "9829053822@upi";
+                String amt = String.format(Locale.US, "%.2f", model.totalAmount().getPaise() / 100.0);
+                upiPayload = "upi://pay?pa=" + shopUpi + "&pn=Shop&am=" + amt + "&cu=INR&tn=Invoice%20" + model.billNumber();
+            }
+
+            QrCode qr = QrCode.encodeText(upiPayload, QrCode.Ecc.MEDIUM);
+            BufferedImage bi = qr.toImage(4, 1);
+            Image pdfImg = Image.getInstance(bi, null);
+            pdfImg.scaleToFit(72, 72);
+            pdfImg.setAlignment(Element.ALIGN_CENTER);
+            qrCell.addElement(pdfImg);
+
+            Paragraph scanLabel = new Paragraph("Scan to pay", FONT_SCAN_TO_PAY);
+            scanLabel.setAlignment(Element.ALIGN_CENTER);
+            scanLabel.setSpacingBefore(2);
+            qrCell.addElement(scanLabel);
+
+            String upiDisplay = model.shop().upiId() != null ? model.shop().upiId() : "UPI Payment";
+            Paragraph upiIdLabel = new Paragraph(upiDisplay, FONT_TINY);
+            upiIdLabel.setAlignment(Element.ALIGN_CENTER);
+            qrCell.addElement(upiIdLabel);
+
+        } catch (Exception ex) {
+            logger.warn("Could not generate QR code for bill {}", model.billNumber(), ex);
+            qrCell.addElement(new Paragraph("Payment QR", FONT_TD_BOLD));
         }
-        addSummaryRow(numTable, "Net Amount Payable:", "₹ " + model.totalAmount().toRupeesString(), TOTAL_FONT, true);
 
-        rightCell.addElement(numTable);
-        summaryTable.addCell(rightCell);
+        table.addCell(qrCell);
 
-        document.add(summaryTable);
+        // Right Cell: Tax Breakdown Table & Tax Amount in Words
+        PdfPCell taxCell = new PdfPCell();
+        taxCell.setBorder(Rectangle.BOTTOM | Rectangle.RIGHT);
+        taxCell.setBorderColor(COLOR_BORDER);
+        taxCell.setPadding(0);
+
+        PdfPTable taxSubTable = new PdfPTable(7);
+        taxSubTable.setWidthPercentage(100);
+        taxSubTable.setWidths(new float[]{18, 18, 11, 15, 11, 15, 18});
+
+        addTaxTh(taxSubTable, "HSN/SAC");
+        addTaxTh(taxSubTable, "Taxable\nValue");
+        addTaxTh(taxSubTable, "CGST\nRate");
+        addTaxTh(taxSubTable, "CGST\nAmount");
+        addTaxTh(taxSubTable, "SGST\nRate");
+        addTaxTh(taxSubTable, "SGST\nAmount");
+        addTaxTh(taxSubTable, "Total\nTax Amount");
+
+        long totalPaise = model.totalAmount().getPaise();
+        long taxablePaise = Math.round((totalPaise) / 1.18);
+        long cgstPaise = Math.round(taxablePaise * 0.09);
+        long sgstPaise = Math.round(taxablePaise * 0.09);
+        long totalTaxPaise = cgstPaise + sgstPaise;
+
+        addTaxTd(taxSubTable, "85446020", Element.ALIGN_CENTER, false);
+        addTaxTd(taxSubTable, Money.ofPaise(taxablePaise).toRupeesString(), Element.ALIGN_RIGHT, false);
+        addTaxTd(taxSubTable, "9%", Element.ALIGN_CENTER, false);
+        addTaxTd(taxSubTable, Money.ofPaise(cgstPaise).toRupeesString(), Element.ALIGN_RIGHT, false);
+        addTaxTd(taxSubTable, "9%", Element.ALIGN_CENTER, false);
+        addTaxTd(taxSubTable, Money.ofPaise(sgstPaise).toRupeesString(), Element.ALIGN_RIGHT, false);
+        addTaxTd(taxSubTable, Money.ofPaise(totalTaxPaise).toRupeesString(), Element.ALIGN_RIGHT, false);
+
+        // Tax Total Row
+        addTaxTd(taxSubTable, "Total", Element.ALIGN_CENTER, true);
+        addTaxTd(taxSubTable, Money.ofPaise(taxablePaise).toRupeesString(), Element.ALIGN_RIGHT, true);
+        addTaxTd(taxSubTable, "", Element.ALIGN_CENTER, true);
+        addTaxTd(taxSubTable, Money.ofPaise(cgstPaise).toRupeesString(), Element.ALIGN_RIGHT, true);
+        addTaxTd(taxSubTable, "", Element.ALIGN_CENTER, true);
+        addTaxTd(taxSubTable, Money.ofPaise(sgstPaise).toRupeesString(), Element.ALIGN_RIGHT, true);
+        addTaxTd(taxSubTable, Money.ofPaise(totalTaxPaise).toRupeesString(), Element.ALIGN_RIGHT, true);
+
+        taxCell.addElement(taxSubTable);
+
+        // Tax in words
+        Paragraph taxInWordsPara = new Paragraph(
+                "Tax Amount (in words) : " + IndianNumberToWords.convertPaiseToInrWords(totalTaxPaise),
+                FONT_TINY_BOLD
+        );
+        taxInWordsPara.setSpacingBefore(4);
+        taxInWordsPara.setSpacingAfter(4);
+        taxInWordsPara.setIndentationLeft(4);
+        taxCell.addElement(taxInWordsPara);
+
+        table.addCell(taxCell);
+        document.add(table);
     }
 
-    private void addFooter(Document document) throws DocumentException {
-        PdfPTable footerTable = new PdfPTable(2);
-        footerTable.setWidthPercentage(100);
-        footerTable.setWidths(new float[]{65, 35});
+    private void addBankAndSignatoryFooter(Document document, BillPrintModel model) throws DocumentException {
+        PdfPTable table = new PdfPTable(2);
+        table.setWidthPercentage(100);
+        table.setWidths(new float[]{55, 45});
 
-        PdfPCell termsCell = new PdfPCell();
-        termsCell.setBorder(Rectangle.NO_BORDER);
-        termsCell.addElement(new Paragraph("Terms & Conditions:", SECTION_HEADER_FONT));
-        termsCell.addElement(new Paragraph("1. Goods once sold can be exchanged within 7 days against original invoice.", SMALL_FONT));
-        termsCell.addElement(new Paragraph("2. Manufacturer warranty applies where specified. Burnt or physically damaged goods void warranty.", SMALL_FONT));
-        termsCell.addElement(new Paragraph("3. Subject to local jurisdiction only.", SMALL_FONT));
-        footerTable.addCell(termsCell);
+        // Left: PAN & Declaration
+        PdfPCell leftCell = new PdfPCell();
+        leftCell.setBorder(Rectangle.LEFT | Rectangle.BOTTOM | Rectangle.RIGHT);
+        leftCell.setBorderColor(COLOR_BORDER);
+        leftCell.setPadding(4);
 
-        PdfPCell signCell = new PdfPCell();
-        signCell.setBorder(Rectangle.NO_BORDER);
-        signCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
-        Paragraph signHeader = new Paragraph("For SHREE GANESH ELECTRICALS", BOLD_FONT);
-        signHeader.setAlignment(Element.ALIGN_RIGHT);
-        signCell.addElement(signHeader);
+        if (model.notes() != null && !model.notes().isBlank()) {
+            leftCell.addElement(new Paragraph("Remarks: " + model.notes(), FONT_TINY));
+        }
 
-        Paragraph spacer = new Paragraph("\n\n");
-        signCell.addElement(spacer);
+        leftCell.addElement(new Paragraph("Company's PAN : " + (model.shop().pan() != null ? model.shop().pan() : ""), FONT_TD_BOLD));
 
-        Paragraph authSign = new Paragraph("Authorized Signatory", SMALL_FONT);
+        Paragraph declTitle = new Paragraph("Declaration", FONT_TINY_BOLD);
+        declTitle.setSpacingBefore(2);
+        leftCell.addElement(declTitle);
+
+        String bName = model.shop().bankName() != null ? model.shop().bankName() : "PUNJAB NATIONAL BANK";
+        String bBranch = model.shop().branch() != null ? model.shop().branch() : "M.I. ROAD - JAIPUR";
+        String bAcc = model.shop().accountNo() != null ? model.shop().accountNo() : "00615010000080";
+        String bIfsc = model.shop().ifsc() != null ? model.shop().ifsc() : "PUNB0006110";
+
+        String decl1 = "(1) OUR BANK : " + bName + " (" + bBranch + ")\nA/c " + bAcc + " & IFSC :-" + bIfsc;
+        String decl2 = "(2) Goods Once sold will not returnable or transferable (3) Our responsibility ceases as soon as goods are delivered to carriers (4) In case of Dishonored cheques charges @ 300/- per cheque will be charged.";
+        leftCell.addElement(new Paragraph(decl1, FONT_TINY));
+        leftCell.addElement(new Paragraph(decl2, FONT_TINY));
+
+        table.addCell(leftCell);
+
+        // Right: Bank Details & Authorised Signatory
+        PdfPCell rightCell = new PdfPCell();
+        rightCell.setBorder(Rectangle.BOTTOM | Rectangle.RIGHT);
+        rightCell.setBorderColor(COLOR_BORDER);
+        rightCell.setPadding(4);
+
+        rightCell.addElement(new Paragraph("Company's Bank Details", FONT_TINY_BOLD));
+        rightCell.addElement(new Paragraph("Bank Name : " + bName, FONT_TINY));
+        rightCell.addElement(new Paragraph("A/c No.   : " + bAcc, FONT_TINY));
+        rightCell.addElement(new Paragraph("Branch & IFS Code: " + bBranch + " & " + bIfsc, FONT_TINY));
+
+        Paragraph forCompany = new Paragraph("for " + model.shop().name(), FONT_TD_BOLD);
+        forCompany.setAlignment(Element.ALIGN_RIGHT);
+        forCompany.setSpacingBefore(6);
+        rightCell.addElement(forCompany);
+
+        // Spacer for physical signature / rubber stamp
+        Paragraph signSpace = new Paragraph("\n\n");
+        rightCell.addElement(signSpace);
+
+        Paragraph authSign = new Paragraph("Authorised Signatory", FONT_TD_BOLD);
         authSign.setAlignment(Element.ALIGN_RIGHT);
-        signCell.addElement(authSign);
-        footerTable.addCell(signCell);
+        rightCell.addElement(authSign);
 
-        document.add(footerTable);
+        table.addCell(rightCell);
+        document.add(table);
     }
 
-    private void addTableHeaderCell(PdfPTable table, String text) {
-        PdfPCell cell = new PdfPCell(new Phrase(text, TABLE_HEADER_FONT));
-        cell.setBackgroundColor(HEADER_BG_COLOR);
-        cell.setPadding(6);
-        cell.setBorderColor(HEADER_BG_COLOR);
+    private void addJurisdictionNote(Document document, BillPrintModel model) throws DocumentException {
+        PdfPTable table = new PdfPTable(1);
+        table.setWidthPercentage(100);
+        table.setSpacingBefore(2);
+
+        PdfPCell cell = new PdfPCell();
+        cell.setBorder(Rectangle.NO_BORDER);
         cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+
+        String city = "JAIPUR";
+        if (model.shop().address() != null && model.shop().address().toUpperCase().contains("JAIPUR")) {
+            city = "JAIPUR";
+        } else if (model.shop().stateName() != null) {
+            city = model.shop().stateName().toUpperCase();
+        }
+
+        Paragraph p1 = new Paragraph("SUBJECT TO " + city + " JURISDICTION", FONT_TINY_BOLD);
+        p1.setAlignment(Element.ALIGN_CENTER);
+        cell.addElement(p1);
+
+        Paragraph p2 = new Paragraph("This is a Computer Generated Invoice", FONT_TINY);
+        p2.setAlignment(Element.ALIGN_CENTER);
+        cell.addElement(p2);
+
+        table.addCell(cell);
+        document.add(table);
+    }
+
+    // -------------------------------------------------------------
+    // TABLE CELL HELPERS
+    // -------------------------------------------------------------
+
+    private void addMetaPair(PdfPTable table, String l1, String v1, String l2, String v2) {
+        PdfPCell c1 = new PdfPCell();
+        c1.setBorder(Rectangle.BOTTOM | Rectangle.RIGHT);
+        c1.setBorderColor(COLOR_LIGHT_BORDER);
+        c1.setPadding(2);
+        c1.addElement(new Paragraph(l1, FONT_META_LABEL));
+        c1.addElement(new Paragraph(v1 != null && !v1.isBlank() ? v1 : " ", FONT_META_VALUE));
+        table.addCell(c1);
+
+        PdfPCell c2 = new PdfPCell();
+        c2.setBorder(Rectangle.BOTTOM);
+        c2.setBorderColor(COLOR_LIGHT_BORDER);
+        c2.setPadding(2);
+        c2.addElement(new Paragraph(l2, FONT_META_LABEL));
+        c2.addElement(new Paragraph(v2 != null && !v2.isBlank() ? v2 : " ", FONT_META_VALUE));
+        table.addCell(c2);
+    }
+
+    private void addTh(PdfPTable table, String text, int align) {
+        PdfPCell cell = new PdfPCell(new Phrase(text, FONT_TH));
+        cell.setHorizontalAlignment(align);
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        cell.setBackgroundColor(COLOR_BG_HEADER);
+        cell.setBorderColor(COLOR_BORDER);
+        cell.setPadding(4);
         table.addCell(cell);
     }
 
-    private void addCell(PdfPTable table, String text, int align, Font font, Color bgColor) {
+    private void addTd(PdfPTable table, String text, int align, Font font, boolean borderBottom) {
         PdfPCell cell = new PdfPCell(new Phrase(text, font));
         cell.setHorizontalAlignment(align);
-        cell.setBackgroundColor(bgColor);
-        cell.setPadding(5);
-        cell.setBorderColor(BORDER_COLOR);
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        cell.setBorder(Rectangle.LEFT | Rectangle.RIGHT | (borderBottom ? Rectangle.BOTTOM : 0));
+        cell.setBorderColor(COLOR_LIGHT_BORDER);
+        cell.setPadding(3);
         table.addCell(cell);
     }
 
-    private void addSummaryRow(PdfPTable table, String label, String value, Font font, boolean isTotal) {
-        PdfPCell labelCell = new PdfPCell(new Phrase(label, font));
-        labelCell.setBorder(Rectangle.NO_BORDER);
-        labelCell.setPadding(3);
-        if (isTotal) {
-            labelCell.setBackgroundColor(LIGHT_BG_COLOR);
-            labelCell.setBorder(Rectangle.TOP);
-            labelCell.setBorderColor(BORDER_COLOR);
-        }
-        table.addCell(labelCell);
+    private void addSummaryLine(PdfPTable table, String col1, String desc, String col3, String col4, String col5, String col6, String amount) {
+        addTd(table, col1, Element.ALIGN_LEFT, FONT_TD, false);
+        addTd(table, desc, Element.ALIGN_RIGHT, FONT_TD_BOLD, false);
+        addTd(table, col3, Element.ALIGN_CENTER, FONT_TD, false);
+        addTd(table, col4, Element.ALIGN_RIGHT, FONT_TD, false);
+        addTd(table, col5, Element.ALIGN_RIGHT, FONT_TD, false);
+        addTd(table, col6, Element.ALIGN_CENTER, FONT_TD, false);
+        addTd(table, amount, Element.ALIGN_RIGHT, FONT_TD_BOLD, false);
+    }
 
-        PdfPCell valueCell = new PdfPCell(new Phrase(value, font));
-        valueCell.setBorder(Rectangle.NO_BORDER);
-        valueCell.setHorizontalAlignment(Element.ALIGN_RIGHT);
-        valueCell.setPadding(3);
+    private void addTaxTh(PdfPTable table, String text) {
+        PdfPCell cell = new PdfPCell(new Phrase(text, FONT_TINY_BOLD));
+        cell.setHorizontalAlignment(Element.ALIGN_CENTER);
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        cell.setBackgroundColor(COLOR_BG_HEADER);
+        cell.setBorderColor(COLOR_LIGHT_BORDER);
+        cell.setPadding(2);
+        table.addCell(cell);
+    }
+
+    private void addTaxTd(PdfPTable table, String text, int align, boolean isTotal) {
+        PdfPCell cell = new PdfPCell(new Phrase(text, isTotal ? FONT_TINY_BOLD : FONT_TINY));
+        cell.setHorizontalAlignment(align);
+        cell.setVerticalAlignment(Element.ALIGN_MIDDLE);
+        cell.setBorderColor(COLOR_LIGHT_BORDER);
         if (isTotal) {
-            valueCell.setBackgroundColor(LIGHT_BG_COLOR);
-            valueCell.setBorder(Rectangle.TOP);
-            valueCell.setBorderColor(BORDER_COLOR);
+            cell.setBackgroundColor(COLOR_BG_HEADER);
+            cell.setBorder(Rectangle.TOP | Rectangle.BOTTOM);
+        } else {
+            cell.setBorder(Rectangle.BOX);
         }
-        table.addCell(valueCell);
+        cell.setPadding(2);
+        table.addCell(cell);
     }
 }

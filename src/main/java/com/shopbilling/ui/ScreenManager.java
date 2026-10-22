@@ -54,7 +54,11 @@ public class ScreenManager {
     }
 
     public void showCreditLedger() {
-        CreditLedgerScreen screen = new CreditLedgerScreen(this);
+        showCreditLedger(0);
+    }
+
+    public void showCreditLedger(int initialTabIndex) {
+        CreditLedgerScreen screen = new CreditLedgerScreen(this, initialTabIndex);
         setScene(screen.getView(), 1050, 720, "UdhyamSetu - Customer & Supplier Ledgers");
     }
 

@@ -42,4 +42,60 @@ public record Customer(
             }
         }
     }
+
+    private static final java.util.regex.Pattern GSTIN_PATTERN =
+            java.util.regex.Pattern.compile("\\b\\d{2}[A-Z]{5}\\d{4}[A-Z]{1}[A-Z\\d]{1}[Z]{1}[A-Z\\d]{1}\\b");
+
+    public String getGstin() {
+        if (notes == null || notes.isBlank()) {
+            return null;
+        }
+        java.util.regex.Matcher m = GSTIN_PATTERN.matcher(notes);
+        if (m.find()) {
+            return m.group();
+        }
+        return null;
+    }
+
+    public boolean isFirm() {
+        if (notes != null && (notes.contains("[FIRM]") || notes.contains("GSTIN:"))) {
+            return true;
+        }
+        return getGstin() != null;
+    }
+
+    public String getStateName() {
+        if (notes != null && notes.contains("State:")) {
+            int idx = notes.indexOf("State:");
+            int end = notes.indexOf('|', idx);
+            if (end == -1) end = notes.indexOf('\n', idx);
+            if (end == -1) end = notes.length();
+            String st = notes.substring(idx + 6, end).trim();
+            if (st.contains("(")) {
+                st = st.substring(0, st.indexOf('(')).trim();
+            }
+            if (!st.isEmpty()) return st;
+        }
+        String gstin = getGstin();
+        if (gstin != null && gstin.length() >= 2) {
+            return StateCodeHelper.getStateName(gstin.substring(0, 2));
+        }
+        return "Rajasthan";
+    }
+
+    public String getStateCode() {
+        if (notes != null && notes.contains("StateCode:")) {
+            int idx = notes.indexOf("StateCode:");
+            int end = notes.indexOf('|', idx);
+            if (end == -1) end = notes.indexOf('\n', idx);
+            if (end == -1) end = notes.length();
+            String cd = notes.substring(idx + 10, end).trim();
+            if (!cd.isEmpty()) return cd;
+        }
+        String gstin = getGstin();
+        if (gstin != null && gstin.length() >= 2) {
+            return gstin.substring(0, 2);
+        }
+        return "08";
+    }
 }

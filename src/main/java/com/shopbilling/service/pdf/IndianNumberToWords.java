@@ -64,6 +64,66 @@ public final class IndianNumberToWords {
         return sb.toString().trim() + " Rupees Only";
     }
 
+    /**
+     * Converts a paise amount to formal INR words including paise if non-zero.
+     * Example: 6558500 -> "INR Sixty Five Thousand Five Hundred Eighty Five Only"
+     * Example: 1000454 -> "INR Ten Thousand Four and Fifty Four paise Only"
+     */
+    public static String convertPaiseToInrWords(long paise) {
+        if (paise == 0) {
+            return "INR Zero Only";
+        }
+        if (paise < 0) {
+            return "Minus " + convertPaiseToInrWords(-paise);
+        }
+        long rupees = paise / 100;
+        long remPaise = paise % 100;
+        String rsStr = convertRawWords(rupees);
+        if (rsStr.isEmpty()) {
+            rsStr = "Zero";
+        }
+        if (remPaise > 0) {
+            return "INR " + rsStr + " and " + convertRawWords(remPaise) + " paise Only";
+        } else {
+            return "INR " + rsStr + " Only";
+        }
+    }
+
+    public static String convertRawWords(long rupees) {
+        if (rupees == 0) return "";
+        StringBuilder sb = new StringBuilder();
+
+        long crores = rupees / 10000000L;
+        rupees %= 10000000L;
+
+        long lakhs = rupees / 100000L;
+        rupees %= 100000L;
+
+        long thousands = rupees / 1000L;
+        rupees %= 1000L;
+
+        long hundreds = rupees / 100L;
+        long remainder = rupees % 100L;
+
+        if (crores > 0) {
+            sb.append(convertThreeDigits((int) crores)).append(" Crore ");
+        }
+        if (lakhs > 0) {
+            sb.append(convertThreeDigits((int) lakhs)).append(" Lakh ");
+        }
+        if (thousands > 0) {
+            sb.append(convertThreeDigits((int) thousands)).append(" Thousand ");
+        }
+        if (hundreds > 0) {
+            sb.append(ONES[(int) hundreds]).append(" Hundred ");
+        }
+        if (remainder > 0) {
+            sb.append(convertTwoDigits((int) remainder)).append(" ");
+        }
+
+        return sb.toString().trim();
+    }
+
     private static String convertThreeDigits(int n) {
         StringBuilder res = new StringBuilder();
         int hundreds = n / 100;
