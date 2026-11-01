@@ -25,9 +25,32 @@ public class ExpenseAndClosingScreen {
     private final ObservableList<ExpenseRecord> expenseData = FXCollections.observableArrayList();
     private final TableView<ExpenseRecord> expenseTable = new TableView<>(expenseData);
 
+    public enum Mode {
+        ALL,
+        EXPENSE_ONLY,
+        CLOSING_ONLY
+    }
+
+    private final Mode mode;
+    private final int initialTabIndex;
+
     public ExpenseAndClosingScreen(ScreenManager screenManager) {
+        this(screenManager, Mode.ALL, 0);
+    }
+
+    public ExpenseAndClosingScreen(ScreenManager screenManager, int initialTabIndex) {
+        this(screenManager, Mode.ALL, initialTabIndex);
+    }
+
+    public ExpenseAndClosingScreen(ScreenManager screenManager, Mode mode) {
+        this(screenManager, mode, 0);
+    }
+
+    public ExpenseAndClosingScreen(ScreenManager screenManager, Mode mode, int initialTabIndex) {
         this.screenManager = Objects.requireNonNull(screenManager, "ScreenManager cannot be null");
         this.context = screenManager.getContext();
+        this.mode = mode != null ? mode : Mode.ALL;
+        this.initialTabIndex = initialTabIndex;
     }
 
     public Parent getView() {
@@ -44,25 +67,41 @@ public class ExpenseAndClosingScreen {
         backBtn.setStyle("-fx-background-color: #f1f5f9; -fx-border-color: #cbd5e1; -fx-border-radius: 4;");
         backBtn.setOnAction(e -> screenManager.showHome());
 
-        Label title = new Label("Expenses & Day-End Cash Closing");
+        String titleText = switch (mode) {
+            case EXPENSE_ONLY -> "Daily Shop Expenses";
+            case CLOSING_ONLY -> "Day-End Cash Closing (Owner)";
+            case ALL -> "Expenses & Day-End Cash Closing";
+        };
+
+        Label title = new Label(titleText);
         title.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #0f172a;");
 
         topBar.getChildren().addAll(backBtn, title);
         root.setTop(topBar);
 
-        TabPane tabPane = new TabPane();
-        tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        if (mode == Mode.EXPENSE_ONLY) {
+            root.setCenter(buildExpenseTab());
+            loadExpenses();
+        } else if (mode == Mode.CLOSING_ONLY) {
+            root.setCenter(buildClosingTab());
+        } else {
+            TabPane tabPane = new TabPane();
+            tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
-        Tab expenseTab = new Tab("Daily Expenses", buildExpenseTab());
-        Tab closingTab = new Tab("Day-End Cash Closing (Owner)", buildClosingTab());
-        if (!context.isOwner()) {
-            closingTab.setDisable(true);
+            Tab expenseTab = new Tab("Daily Expenses", buildExpenseTab());
+            Tab closingTab = new Tab("Day-End Cash Closing (Owner)", buildClosingTab());
+            if (!context.isOwner()) {
+                closingTab.setDisable(true);
+            }
+
+            tabPane.getTabs().addAll(expenseTab, closingTab);
+            if (initialTabIndex > 0 && initialTabIndex < tabPane.getTabs().size()) {
+                tabPane.getSelectionModel().select(initialTabIndex);
+            }
+            root.setCenter(tabPane);
+
+            loadExpenses();
         }
-
-        tabPane.getTabs().addAll(expenseTab, closingTab);
-        root.setCenter(tabPane);
-
-        loadExpenses();
         return root;
     }
 

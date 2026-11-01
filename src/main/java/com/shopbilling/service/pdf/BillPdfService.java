@@ -31,7 +31,14 @@ import com.shopbilling.model.ProductVariant;
 import com.shopbilling.model.Sale;
 import com.shopbilling.model.SaleItem;
 import com.shopbilling.service.EntityNotFoundException;
-import com.shopbilling.service.pdf.qrcode.QrCode;
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.EncodeHintType;
+import com.google.zxing.client.j2se.MatrixToImageWriter;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.QRCodeWriter;
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
+import java.util.HashMap;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,6 +51,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
@@ -240,6 +248,8 @@ public class BillPdfService {
                 Brand brand = brandRepository.findById(conn, product.brandId())
                         .orElseThrow(() -> new EntityNotFoundException("Brand id=" + product.brandId() + " not found"));
 
+                String itemHsn = item.hsnCode() != null ? item.hsnCode() : (product.hsnCode() != null ? product.hsnCode() : "85446020");
+                double itemGst = item.gstRate() != null ? item.gstRate() : (product.gstRate() != null ? product.gstRate() : 18.0);
                 lineItems.add(new BillPrintModel.BillLineItem(
                         idx++,
                         product.name(),
@@ -250,8 +260,8 @@ public class BillPdfService {
                         item.unitPrice(),
                         item.lineDiscount(),
                         item.lineTotal(),
-                        "85446020",
-                        18.0
+                        itemHsn,
+                        itemGst
                 ));
             }
 
@@ -263,15 +273,28 @@ public class BillPdfService {
             String displayBillNo = sale.billNumber() != null ? sale.billNumber() : ("REG-" + sale.id());
             String words = IndianNumberToWords.convertPaiseToInrWords(sale.totalAmount().getPaise());
 
-            // Build dynamic UPI QR payload
+            // Build dynamic UPI QR payload conforming to NPCI specification
             String upiAmount = String.format(Locale.US, "%.2f", sale.totalAmount().getPaise() / 100.0);
             String upiQrPayload;
             try {
-                String encShop = URLEncoder.encode(shopName, StandardCharsets.UTF_8).replace("+", "%20");
-                String encBill = URLEncoder.encode(displayBillNo, StandardCharsets.UTF_8).replace("+", "%20");
-                upiQrPayload = "upi://pay?pa=" + shopUpiId + "&pn=" + encShop + "&am=" + upiAmount + "&cu=INR&tn=Invoice%20" + encBill;
+                String cleanShop = (shopName != null ? shopName : "Shop")
+                        .replace("&", "and")
+                        .replaceAll("[^a-zA-Z0-9 ]", "")
+                        .replaceAll("\\s+", " ")
+                        .trim();
+                if (cleanShop.length() > 50) cleanShop = cleanShop.substring(0, 50).trim();
+                String cleanBill = (displayBillNo != null ? displayBillNo : ("INV-" + sale.id()))
+                        .replace("/", "-")
+                        .replaceAll("[^a-zA-Z0-9-]", "")
+                        .trim();
+
+                String encShop = URLEncoder.encode(cleanShop, StandardCharsets.UTF_8).replace("+", "%20");
+                String encBill = URLEncoder.encode(cleanBill, StandardCharsets.UTF_8).replace("+", "%20");
+                String cleanUpi = (shopUpiId != null ? shopUpiId.trim() : "8233411191-2@ybl");
+
+                upiQrPayload = "upi://pay?pa=" + cleanUpi + "&pn=" + encShop + "&am=" + upiAmount + "&cu=INR&tn=Invoice%20" + encBill;
             } catch (Exception e) {
-                upiQrPayload = "upi://pay?pa=" + shopUpiId + "&pn=Shop&am=" + upiAmount + "&cu=INR";
+                upiQrPayload = "upi://pay?pa=" + (shopUpiId != null ? shopUpiId.trim() : "8233411191-2@ybl") + "&pn=Shop&am=" + upiAmount + "&cu=INR";
             }
 
             return new BillPrintModel(
@@ -585,15 +608,32 @@ public class BillPdfService {
         try {
             String upiPayload = model.upiQrPayload();
             if (upiPayload == null || upiPayload.isBlank()) {
-                String shopUpi = model.shop().upiId() != null && !model.shop().upiId().isBlank() ? model.shop().upiId() : "9829053822@upi";
+                String shopUpi = model.shop().upiId() != null && !model.shop().upiId().isBlank() ? model.shop().upiId().trim() : "8233411191-2@ybl";
                 String amt = String.format(Locale.US, "%.2f", model.totalAmount().getPaise() / 100.0);
-                upiPayload = "upi://pay?pa=" + shopUpi + "&pn=Shop&am=" + amt + "&cu=INR&tn=Invoice%20" + model.billNumber();
+                String cleanShop = (model.shop().name() != null ? model.shop().name() : "Shop")
+                        .replace("&", "and")
+                        .replaceAll("[^a-zA-Z0-9 ]", "")
+                        .replaceAll("\\s+", " ")
+                        .trim();
+                if (cleanShop.length() > 50) cleanShop = cleanShop.substring(0, 50).trim();
+                String cleanBill = (model.billNumber() != null ? model.billNumber() : "Invoice")
+                        .replace("/", "-")
+                        .replaceAll("[^a-zA-Z0-9-]", "")
+                        .trim();
+                upiPayload = "upi://pay?pa=" + shopUpi + "&pn=" + URLEncoder.encode(cleanShop, StandardCharsets.UTF_8).replace("+", "%20")
+                        + "&am=" + amt + "&cu=INR&tn=Invoice%20" + URLEncoder.encode(cleanBill, StandardCharsets.UTF_8).replace("+", "%20");
             }
 
-            QrCode qr = QrCode.encodeText(upiPayload, QrCode.Ecc.MEDIUM);
-            BufferedImage bi = qr.toImage(4, 1);
+            // Google ZXing industrial-grade QR code generation with standard ISO/IEC 18004 quiet zone
+            QRCodeWriter qrWriter = new QRCodeWriter();
+            Map<EncodeHintType, Object> hints = new HashMap<>();
+            hints.put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.M);
+            hints.put(EncodeHintType.MARGIN, 2);
+            BitMatrix bitMatrix = qrWriter.encode(upiPayload, BarcodeFormat.QR_CODE, 300, 300, hints);
+            BufferedImage bi = MatrixToImageWriter.toBufferedImage(bitMatrix);
             Image pdfImg = Image.getInstance(bi, null);
-            pdfImg.scaleToFit(72, 72);
+            pdfImg.setInterpolation(false);
+            pdfImg.scaleToFit(95, 95);
             pdfImg.setAlignment(Element.ALIGN_CENTER);
             qrCell.addElement(pdfImg);
 
@@ -632,27 +672,61 @@ public class BillPdfService {
         addTaxTh(taxSubTable, "SGST\nAmount");
         addTaxTh(taxSubTable, "Total\nTax Amount");
 
-        long totalPaise = model.totalAmount().getPaise();
-        long taxablePaise = Math.round((totalPaise) / 1.18);
-        long cgstPaise = Math.round(taxablePaise * 0.09);
-        long sgstPaise = Math.round(taxablePaise * 0.09);
-        long totalTaxPaise = cgstPaise + sgstPaise;
+        // Group line items by HSN and GST rate for compliant statutory breakdown
+        record HsnTaxEntry(String hsn, double rate, long taxablePaise, long taxPaise) {}
+        Map<String, HsnTaxEntry> hsnMap = new LinkedHashMap<>();
 
-        addTaxTd(taxSubTable, "85446020", Element.ALIGN_CENTER, false);
-        addTaxTd(taxSubTable, Money.ofPaise(taxablePaise).toRupeesString(), Element.ALIGN_RIGHT, false);
-        addTaxTd(taxSubTable, "9%", Element.ALIGN_CENTER, false);
-        addTaxTd(taxSubTable, Money.ofPaise(cgstPaise).toRupeesString(), Element.ALIGN_RIGHT, false);
-        addTaxTd(taxSubTable, "9%", Element.ALIGN_CENTER, false);
-        addTaxTd(taxSubTable, Money.ofPaise(sgstPaise).toRupeesString(), Element.ALIGN_RIGHT, false);
-        addTaxTd(taxSubTable, Money.ofPaise(totalTaxPaise).toRupeesString(), Element.ALIGN_RIGHT, false);
+        for (BillPrintModel.BillLineItem item : model.items()) {
+            String hsn = (item.hsnSac() != null && !item.hsnSac().isBlank()) ? item.hsnSac() : "85446020";
+            double rate = item.gstRatePercent() > 0 ? item.gstRatePercent() : 18.0;
+            String key = hsn + "_" + rate;
+            long itemPaise = item.lineTotal().getPaise();
+            long itemTaxable = Math.round(itemPaise / (1.0 + (rate / 100.0)));
+            long itemTax = itemPaise - itemTaxable;
+
+            hsnMap.compute(key, (k, existing) -> {
+                if (existing == null) {
+                    return new HsnTaxEntry(hsn, rate, itemTaxable, itemTax);
+                } else {
+                    return new HsnTaxEntry(hsn, rate, existing.taxablePaise + itemTaxable, existing.taxPaise + itemTax);
+                }
+            });
+        }
+
+        long totalTaxablePaise = 0L;
+        long totalCgstPaise = 0L;
+        long totalSgstPaise = 0L;
+        long totalTaxPaise = 0L;
+
+        for (HsnTaxEntry entry : hsnMap.values()) {
+            double halfRate = entry.rate / 2.0;
+            long cgst = Math.round(entry.taxablePaise * (halfRate / 100.0));
+            long sgst = Math.round(entry.taxablePaise * (halfRate / 100.0));
+            long rowTax = cgst + sgst;
+
+            totalTaxablePaise += entry.taxablePaise;
+            totalCgstPaise += cgst;
+            totalSgstPaise += sgst;
+            totalTaxPaise += rowTax;
+
+            String rateStr = (halfRate == (long) halfRate) ? String.format("%.0f%%", halfRate) : String.format("%.1f%%", halfRate);
+
+            addTaxTd(taxSubTable, entry.hsn, Element.ALIGN_CENTER, false);
+            addTaxTd(taxSubTable, Money.ofPaise(entry.taxablePaise).toRupeesString(), Element.ALIGN_RIGHT, false);
+            addTaxTd(taxSubTable, rateStr, Element.ALIGN_CENTER, false);
+            addTaxTd(taxSubTable, Money.ofPaise(cgst).toRupeesString(), Element.ALIGN_RIGHT, false);
+            addTaxTd(taxSubTable, rateStr, Element.ALIGN_CENTER, false);
+            addTaxTd(taxSubTable, Money.ofPaise(sgst).toRupeesString(), Element.ALIGN_RIGHT, false);
+            addTaxTd(taxSubTable, Money.ofPaise(rowTax).toRupeesString(), Element.ALIGN_RIGHT, false);
+        }
 
         // Tax Total Row
         addTaxTd(taxSubTable, "Total", Element.ALIGN_CENTER, true);
-        addTaxTd(taxSubTable, Money.ofPaise(taxablePaise).toRupeesString(), Element.ALIGN_RIGHT, true);
+        addTaxTd(taxSubTable, Money.ofPaise(totalTaxablePaise).toRupeesString(), Element.ALIGN_RIGHT, true);
         addTaxTd(taxSubTable, "", Element.ALIGN_CENTER, true);
-        addTaxTd(taxSubTable, Money.ofPaise(cgstPaise).toRupeesString(), Element.ALIGN_RIGHT, true);
+        addTaxTd(taxSubTable, Money.ofPaise(totalCgstPaise).toRupeesString(), Element.ALIGN_RIGHT, true);
         addTaxTd(taxSubTable, "", Element.ALIGN_CENTER, true);
-        addTaxTd(taxSubTable, Money.ofPaise(sgstPaise).toRupeesString(), Element.ALIGN_RIGHT, true);
+        addTaxTd(taxSubTable, Money.ofPaise(totalSgstPaise).toRupeesString(), Element.ALIGN_RIGHT, true);
         addTaxTd(taxSubTable, Money.ofPaise(totalTaxPaise).toRupeesString(), Element.ALIGN_RIGHT, true);
 
         taxCell.addElement(taxSubTable);

@@ -208,6 +208,11 @@ public class RegisterSaleService {
             // 7. Insert line items and deduct stock
             List<SaleItem> savedItems = new ArrayList<>();
             for (SaleItemInput input : items) {
+                ProductVariant variant = variantRepository.findById(conn, input.variantId())
+                        .orElseThrow(() -> new EntityNotFoundException("ProductVariant id=" + input.variantId() + " not found"));
+                Product product = productRepository.findById(conn, variant.productId())
+                        .orElseThrow(() -> new EntityNotFoundException("Product id=" + variant.productId() + " not found"));
+
                 SaleItem itemToInsert = new SaleItem(
                         null,
                         saleId,
@@ -215,7 +220,9 @@ public class RegisterSaleService {
                         input.quantity(),
                         input.unitPrice(),
                         input.lineDiscount(),
-                        input.calculateLineTotal()
+                        input.calculateLineTotal(),
+                        product.hsnCode(),
+                        product.gstRate()
                 );
                 SaleItem savedItem = saleRepository.insertSaleItem(conn, itemToInsert);
                 savedItems.add(savedItem);

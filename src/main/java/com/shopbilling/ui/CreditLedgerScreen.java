@@ -27,15 +27,31 @@ public class CreditLedgerScreen {
     private final ObservableList<SupplierPayableSummary> supplierData = FXCollections.observableArrayList();
     private final TableView<SupplierPayableSummary> supplierTable = new TableView<>(supplierData);
 
+    public enum Mode {
+        ALL,
+        CUSTOMER_ONLY,
+        SUPPLIER_ONLY
+    }
+
+    private final Mode mode;
     private final int initialTabIndex;
 
     public CreditLedgerScreen(ScreenManager screenManager) {
-        this(screenManager, 0);
+        this(screenManager, Mode.ALL, 0);
     }
 
     public CreditLedgerScreen(ScreenManager screenManager, int initialTabIndex) {
+        this(screenManager, Mode.ALL, initialTabIndex);
+    }
+
+    public CreditLedgerScreen(ScreenManager screenManager, Mode mode) {
+        this(screenManager, mode, 0);
+    }
+
+    public CreditLedgerScreen(ScreenManager screenManager, Mode mode, int initialTabIndex) {
         this.screenManager = Objects.requireNonNull(screenManager, "ScreenManager cannot be null");
         this.context = screenManager.getContext();
+        this.mode = mode != null ? mode : Mode.ALL;
         this.initialTabIndex = initialTabIndex;
     }
 
@@ -53,27 +69,40 @@ public class CreditLedgerScreen {
         backBtn.setStyle("-fx-background-color: #f1f5f9; -fx-border-color: #cbd5e1; -fx-border-radius: 4;");
         backBtn.setOnAction(e -> screenManager.showHome());
 
-        Label title = new Label("Credit Ledgers & Overdue Aging");
+        String titleText = switch (mode) {
+            case CUSTOMER_ONLY -> "Customer Receivables & Overdue Aging";
+            case SUPPLIER_ONLY -> "Supplier Payables & Distributor Ledgers";
+            case ALL -> "Credit Ledgers & Overdue Aging";
+        };
+
+        Label title = new Label(titleText);
         title.setStyle("-fx-font-size: 20px; -fx-font-weight: bold; -fx-text-fill: #0f172a;");
 
         topBar.getChildren().addAll(backBtn, title);
         root.setTop(topBar);
 
-        // Center: Tabs for Customers and Suppliers
-        TabPane tabPane = new TabPane();
-        tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
+        if (mode == Mode.CUSTOMER_ONLY) {
+            root.setCenter(buildCustomerTab());
+            loadCustomerData();
+        } else if (mode == Mode.SUPPLIER_ONLY) {
+            root.setCenter(buildSupplierTab());
+            loadSupplierData();
+        } else {
+            TabPane tabPane = new TabPane();
+            tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
 
-        Tab custTab = new Tab("Customer Receivables & Aging", buildCustomerTab());
-        Tab suppTab = new Tab("Supplier Payables", buildSupplierTab());
+            Tab custTab = new Tab("Customer Receivables & Aging", buildCustomerTab());
+            Tab suppTab = new Tab("Supplier Payables", buildSupplierTab());
 
-        tabPane.getTabs().addAll(custTab, suppTab);
-        if (initialTabIndex > 0 && initialTabIndex < tabPane.getTabs().size()) {
-            tabPane.getSelectionModel().select(initialTabIndex);
+            tabPane.getTabs().addAll(custTab, suppTab);
+            if (initialTabIndex > 0 && initialTabIndex < tabPane.getTabs().size()) {
+                tabPane.getSelectionModel().select(initialTabIndex);
+            }
+            root.setCenter(tabPane);
+
+            loadCustomerData();
+            loadSupplierData();
         }
-        root.setCenter(tabPane);
-
-        loadCustomerData();
-        loadSupplierData();
 
         return root;
     }

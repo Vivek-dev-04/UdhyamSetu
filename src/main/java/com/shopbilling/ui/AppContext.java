@@ -50,6 +50,18 @@ public class AppContext {
     private final SettingsRepository settingsRepository;
     private final WarrantyRepository warrantyRepository;
     private final CloudSyncRepository cloudSyncRepository;
+    private final HsnRepository hsnRepository;
+    private final ProductGroupRepository productGroupRepository;
+    private final ProductHsnMappingRepository productHsnMappingRepository;
+    private final GstRateRepository gstRateRepository;
+    private final HsnAuditRepository hsnAuditRepository;
+
+    private final ProductGroupService productGroupService;
+    private final GstRateService gstRateService;
+    private final HsnClassificationEngine hsnClassificationEngine;
+    private final HsnVerificationService hsnVerificationService;
+    private final HsnService hsnService;
+    private final HsnImportService hsnImportService;
 
     // Services
     private final AuditLogService auditLogService;
@@ -138,6 +150,11 @@ public class AppContext {
         this.settingsRepository = new SettingsRepository();
         this.warrantyRepository = new WarrantyRepository();
         this.cloudSyncRepository = new CloudSyncRepository();
+        this.hsnRepository = new HsnRepository();
+        this.productGroupRepository = new ProductGroupRepository();
+        this.productHsnMappingRepository = new ProductHsnMappingRepository();
+        this.gstRateRepository = new GstRateRepository();
+        this.hsnAuditRepository = new HsnAuditRepository();
 
         // Initialize services
         this.auditLogService = new AuditLogService(transactionHelper, auditLogRepository, userRepository);
@@ -415,6 +432,26 @@ public class AppContext {
                 transactionHelper,
                 settingsRepository
         );
+
+        this.hsnService = new HsnService(transactionHelper, hsnRepository);
+        this.hsnImportService = new HsnImportService(transactionHelper, hsnRepository);
+        this.productGroupService = new ProductGroupService(transactionHelper, productGroupRepository);
+        this.gstRateService = new GstRateService(transactionHelper, gstRateRepository);
+        this.hsnClassificationEngine = new HsnClassificationEngine(
+                transactionHelper,
+                hsnRepository,
+                productHsnMappingRepository,
+                productGroupRepository,
+                gstRateRepository
+        );
+        this.hsnVerificationService = new HsnVerificationService(
+                transactionHelper,
+                productRepository,
+                hsnRepository,
+                productHsnMappingRepository,
+                hsnAuditRepository,
+                gstRateRepository
+        );
     }
 
     public ConnectionFactory getConnectionFactory() { return connectionFactory; }
@@ -462,6 +499,17 @@ public class AppContext {
     public AuditAnomalyService getAuditAnomalyService() { return auditAnomalyService; }
     public CloudBackupSyncService getCloudBackupSyncService() { return cloudBackupSyncService; }
     public I18nService getI18nService() { return i18nService; }
+    public HsnRepository getHsnRepository() { return hsnRepository; }
+    public HsnService getHsnService() { return hsnService; }
+    public HsnImportService getHsnImportService() { return hsnImportService; }
+    public ProductGroupRepository getProductGroupRepository() { return productGroupRepository; }
+    public ProductHsnMappingRepository getProductHsnMappingRepository() { return productHsnMappingRepository; }
+    public GstRateRepository getGstRateRepository() { return gstRateRepository; }
+    public HsnAuditRepository getHsnAuditRepository() { return hsnAuditRepository; }
+    public ProductGroupService getProductGroupService() { return productGroupService; }
+    public GstRateService getGstRateService() { return gstRateService; }
+    public HsnClassificationEngine getHsnClassificationEngine() { return hsnClassificationEngine; }
+    public HsnVerificationService getHsnVerificationService() { return hsnVerificationService; }
     public SettingsRepository getSettingsRepository() { return settingsRepository; }
 
     public User getCurrentUser() { return currentUser; }

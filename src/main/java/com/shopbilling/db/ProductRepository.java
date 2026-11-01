@@ -1,5 +1,6 @@
 package com.shopbilling.db;
 
+import com.shopbilling.model.ClassificationStatus;
 import com.shopbilling.model.Product;
 
 import java.sql.Connection;
@@ -15,6 +16,7 @@ import java.util.Optional;
 
 /**
  * Parameterized SQL repository for Products (PRD Section 7.2, FR-4 & FR-5).
+ * Integrated with GST HSN code and GST tax rate (Section 7).
  */
 public class ProductRepository {
 
@@ -22,8 +24,8 @@ public class ProductRepository {
         Objects.requireNonNull(conn, "Connection cannot be null");
         Objects.requireNonNull(product, "Product cannot be null");
 
-        String sql = "INSERT INTO products (brand_id, category_id, name, unit_code, reorder_level_scaled, is_active) " +
-                "VALUES (?, ?, ?, ?, ?, ?);";
+        String sql = "INSERT INTO products (brand_id, category_id, name, unit_code, reorder_level_scaled, is_active, hsn_code, gst_rate, group_id, hsn_status) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
 
         try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setLong(1, product.brandId());
@@ -36,6 +38,23 @@ public class ProductRepository {
                 ps.setNull(5, Types.INTEGER);
             }
             ps.setInt(6, product.isActive() ? 1 : 0);
+            if (product.hsnCode() != null && !product.hsnCode().trim().isEmpty()) {
+                ps.setString(7, product.hsnCode().trim());
+            } else {
+                ps.setNull(7, Types.VARCHAR);
+            }
+            if (product.gstRate() != null) {
+                ps.setDouble(8, product.gstRate());
+            } else {
+                ps.setDouble(8, 18.0);
+            }
+            if (product.groupId() != null) {
+                ps.setLong(9, product.groupId());
+            } else {
+                ps.setNull(9, Types.INTEGER);
+            }
+            ps.setString(10, product.hsnStatus() != null ? product.hsnStatus().name() : ClassificationStatus.PENDING.name());
+
             ps.executeUpdate();
 
             try (ResultSet rs = ps.getGeneratedKeys()) {
@@ -51,7 +70,7 @@ public class ProductRepository {
 
     public Optional<Product> findById(Connection conn, long id) throws SQLException {
         Objects.requireNonNull(conn, "Connection cannot be null");
-        String sql = "SELECT id, brand_id, category_id, name, unit_code, reorder_level_scaled, is_active, created_at " +
+        String sql = "SELECT id, brand_id, category_id, name, unit_code, reorder_level_scaled, is_active, created_at, hsn_code, gst_rate, group_id, hsn_status " +
                 "FROM products WHERE id = ?;";
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, id);
@@ -67,9 +86,9 @@ public class ProductRepository {
     public List<Product> findAll(Connection conn, boolean activeOnly) throws SQLException {
         Objects.requireNonNull(conn, "Connection cannot be null");
         String sql = activeOnly
-                ? "SELECT id, brand_id, category_id, name, unit_code, reorder_level_scaled, is_active, created_at " +
+                ? "SELECT id, brand_id, category_id, name, unit_code, reorder_level_scaled, is_active, created_at, hsn_code, gst_rate, group_id, hsn_status " +
                 "FROM products WHERE is_active = 1 ORDER BY name COLLATE NOCASE ASC;"
-                : "SELECT id, brand_id, category_id, name, unit_code, reorder_level_scaled, is_active, created_at " +
+                : "SELECT id, brand_id, category_id, name, unit_code, reorder_level_scaled, is_active, created_at, hsn_code, gst_rate, group_id, hsn_status " +
                 "FROM products ORDER BY name COLLATE NOCASE ASC;";
 
         List<Product> list = new ArrayList<>();
@@ -84,7 +103,7 @@ public class ProductRepository {
 
     public List<Product> searchByName(Connection conn, String query) throws SQLException {
         Objects.requireNonNull(conn, "Connection cannot be null");
-        String sql = "SELECT id, brand_id, category_id, name, unit_code, reorder_level_scaled, is_active, created_at " +
+        String sql = "SELECT id, brand_id, category_id, name, unit_code, reorder_level_scaled, is_active, created_at, hsn_code, gst_rate, group_id, hsn_status " +
                 "FROM products WHERE name LIKE ? COLLATE NOCASE AND is_active = 1 ORDER BY name ASC LIMIT 50;";
         List<Product> list = new ArrayList<>();
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
@@ -104,7 +123,7 @@ public class ProductRepository {
         Objects.requireNonNull(product.id(), "Product ID cannot be null for update");
 
         String sql = "UPDATE products SET brand_id = ?, category_id = ?, name = ?, unit_code = ?, " +
-                "reorder_level_scaled = ?, is_active = ? WHERE id = ?;";
+                "reorder_level_scaled = ?, is_active = ?, hsn_code = ?, gst_rate = ?, group_id = ?, hsn_status = ? WHERE id = ?;";
 
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, product.brandId());
@@ -117,7 +136,23 @@ public class ProductRepository {
                 ps.setNull(5, Types.INTEGER);
             }
             ps.setInt(6, product.isActive() ? 1 : 0);
-            ps.setLong(7, product.id());
+            if (product.hsnCode() != null && !product.hsnCode().trim().isEmpty()) {
+                ps.setString(7, product.hsnCode().trim());
+            } else {
+                ps.setNull(7, Types.VARCHAR);
+            }
+            if (product.gstRate() != null) {
+                ps.setDouble(8, product.gstRate());
+            } else {
+                ps.setDouble(8, 18.0);
+            }
+            if (product.groupId() != null) {
+                ps.setLong(9, product.groupId());
+            } else {
+                ps.setNull(9, Types.INTEGER);
+            }
+            ps.setString(10, product.hsnStatus() != null ? product.hsnStatus().name() : ClassificationStatus.PENDING.name());
+            ps.setLong(11, product.id());
 
             return ps.executeUpdate() > 0;
         }
@@ -146,6 +181,16 @@ public class ProductRepository {
         long reorderLevel = rs.getLong("reorder_level_scaled");
         Long reorderVal = rs.wasNull() ? null : reorderLevel;
 
+        String hsnCode = rs.getString("hsn_code");
+        double gstRate = rs.getDouble("gst_rate");
+        Double gstVal = rs.wasNull() ? 18.0 : gstRate;
+
+        long grpId = rs.getLong("group_id");
+        Long groupVal = rs.wasNull() ? null : grpId;
+
+        String statusStr = rs.getString("hsn_status");
+        ClassificationStatus statusVal = ClassificationStatus.fromString(statusStr);
+
         return new Product(
                 rs.getLong("id"),
                 rs.getLong("brand_id"),
@@ -154,7 +199,11 @@ public class ProductRepository {
                 rs.getString("unit_code"),
                 reorderVal,
                 rs.getInt("is_active") == 1,
-                rs.getString("created_at")
+                rs.getString("created_at"),
+                hsnCode,
+                gstVal,
+                groupVal,
+                statusVal
         );
     }
 }

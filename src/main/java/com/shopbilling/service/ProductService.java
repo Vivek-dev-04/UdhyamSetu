@@ -9,7 +9,9 @@ import com.shopbilling.db.UnitRepository;
 import com.shopbilling.model.Brand;
 import com.shopbilling.model.Category;
 import com.shopbilling.model.Money;
+import com.shopbilling.model.ClassificationStatus;
 import com.shopbilling.model.Product;
+import com.shopbilling.model.HsnItem;
 import com.shopbilling.model.ProductVariant;
 import com.shopbilling.model.ProductWithVariants;
 import com.shopbilling.model.Quantity;
@@ -52,6 +54,14 @@ public class ProductService {
     }
 
     public Product createProduct(long brandId, long categoryId, String name, String unitCode, Quantity reorderLevel) {
+        return createProduct(brandId, categoryId, name, unitCode, reorderLevel, null, 18.0);
+    }
+
+    public Product createProduct(long brandId, long categoryId, String name, String unitCode, Quantity reorderLevel, String hsnCode, Double gstRate) {
+        return createProduct(brandId, categoryId, name, unitCode, reorderLevel, hsnCode, gstRate, null, null);
+    }
+
+    public Product createProduct(long brandId, long categoryId, String name, String unitCode, Quantity reorderLevel, String hsnCode, Double gstRate, Long groupId, ClassificationStatus hsnStatus) {
         String cleanName = validateNonBlank(name, "Product");
         String cleanUnit = validateNonBlank(unitCode, "Unit code").toUpperCase();
 
@@ -78,14 +88,29 @@ public class ProductService {
                 reorderScaled = reorderLevel.getScaledValue();
             }
 
-            Product product = new Product(null, brandId, categoryId, cleanName, cleanUnit, reorderScaled, true, null);
+            String cleanHsn = hsnCode != null && !hsnCode.trim().isEmpty() ? HsnItem.cleanCode(hsnCode) : null;
+            double rate = gstRate != null ? gstRate : 18.0;
+
+            Product product = new Product(null, brandId, categoryId, cleanName, cleanUnit, reorderScaled, true, null, cleanHsn, rate, groupId, hsnStatus);
             Product created = productRepository.insert(conn, product);
-            logger.info("Created product id={} name='{}' unit={}", created.id(), created.name(), created.unitCode());
+            logger.info("Created product id={} name='{}' unit={} hsn={} gst={}", created.id(), created.name(), created.unitCode(), cleanHsn, rate);
             return created;
         });
     }
 
     public Product updateProduct(long id, long brandId, long categoryId, String name, String unitCode, Quantity reorderLevel, boolean isActive) {
+        return transactionHelper.execute(conn -> {
+            Product existing = productRepository.findById(conn, id)
+                    .orElseThrow(() -> new EntityNotFoundException("Product id=" + id + " not found"));
+            return updateProduct(id, brandId, categoryId, name, unitCode, reorderLevel, isActive, existing.hsnCode(), existing.gstRate());
+        });
+    }
+
+    public Product updateProduct(long id, long brandId, long categoryId, String name, String unitCode, Quantity reorderLevel, boolean isActive, String hsnCode, Double gstRate) {
+        return updateProduct(id, brandId, categoryId, name, unitCode, reorderLevel, isActive, hsnCode, gstRate, null, null);
+    }
+
+    public Product updateProduct(long id, long brandId, long categoryId, String name, String unitCode, Quantity reorderLevel, boolean isActive, String hsnCode, Double gstRate, Long groupId, ClassificationStatus hsnStatus) {
         String cleanName = validateNonBlank(name, "Product");
         String cleanUnit = validateNonBlank(unitCode, "Unit code").toUpperCase();
 
@@ -114,9 +139,14 @@ public class ProductService {
                 reorderScaled = reorderLevel.getScaledValue();
             }
 
-            Product updated = new Product(id, brandId, categoryId, cleanName, cleanUnit, reorderScaled, isActive, existing.createdAt());
+            String cleanHsn = hsnCode != null && !hsnCode.trim().isEmpty() ? HsnItem.cleanCode(hsnCode) : null;
+            double rate = gstRate != null ? gstRate : 18.0;
+
+            Long effectiveGroupId = groupId != null ? groupId : existing.groupId();
+            ClassificationStatus effectiveStatus = hsnStatus != null ? hsnStatus : existing.hsnStatus();
+            Product updated = new Product(id, brandId, categoryId, cleanName, cleanUnit, reorderScaled, isActive, existing.createdAt(), cleanHsn, rate, effectiveGroupId, effectiveStatus);
             productRepository.update(conn, updated);
-            logger.info("Updated product id={} name='{}'", id, cleanName);
+            logger.info("Updated product id={} name='{}' hsn={} gst={}", id, cleanName, cleanHsn, rate);
             return updated;
         });
     }
@@ -184,6 +214,10 @@ public class ProductService {
 
             return Optional.of(new ProductWithVariants(product, brand, category, unit, variants));
         });
+    }
+
+    public List<Product> getAllProducts(boolean includeInactive) {
+        return transactionHelper.execute(conn -> productRepository.findAll(conn, !includeInactive));
     }
 
     public List<ProductWithVariants> searchProducts(String query) {

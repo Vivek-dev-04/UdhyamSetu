@@ -88,7 +88,8 @@ public class SaleRepository {
         Objects.requireNonNull(item, "SaleItem cannot be null");
 
         String sql = "INSERT INTO sale_items (sale_id, variant_id, quantity_scaled, unit_price_paise, " +
-                "line_discount_paise, line_total_paise) VALUES (?, ?, ?, ?, ?, ?);";
+                "line_discount_paise, line_total_paise, hsn_code, gst_rate, cgst_rate, sgst_rate, igst_rate, cgst_paise, sgst_paise, igst_paise) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
 
         try (PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             ps.setLong(1, item.saleId());
@@ -97,6 +98,22 @@ public class SaleRepository {
             ps.setLong(4, item.unitPrice().getPaise());
             ps.setLong(5, item.lineDiscount().getPaise());
             ps.setLong(6, item.lineTotal().getPaise());
+            if (item.hsnCode() != null && !item.hsnCode().trim().isEmpty()) {
+                ps.setString(7, item.hsnCode().trim());
+            } else {
+                ps.setNull(7, Types.VARCHAR);
+            }
+            if (item.gstRate() != null) {
+                ps.setDouble(8, item.gstRate());
+            } else {
+                ps.setDouble(8, 18.0);
+            }
+            ps.setDouble(9, item.cgstRate() != null ? item.cgstRate() : 9.0);
+            ps.setDouble(10, item.sgstRate() != null ? item.sgstRate() : 9.0);
+            ps.setDouble(11, item.igstRate() != null ? item.igstRate() : 0.0);
+            ps.setLong(12, item.cgstPaise() != null ? item.cgstPaise() : 0L);
+            ps.setLong(13, item.sgstPaise() != null ? item.sgstPaise() : 0L);
+            ps.setLong(14, item.igstPaise() != null ? item.igstPaise() : 0L);
 
             ps.executeUpdate();
 
@@ -110,7 +127,15 @@ public class SaleRepository {
                             item.quantity(),
                             item.unitPrice(),
                             item.lineDiscount(),
-                            item.lineTotal()
+                            item.lineTotal(),
+                            item.hsnCode(),
+                            item.gstRate(),
+                            item.cgstRate(),
+                            item.sgstRate(),
+                            item.igstRate(),
+                            item.cgstPaise(),
+                            item.sgstPaise(),
+                            item.igstPaise()
                     );
                 }
             }
@@ -158,13 +183,17 @@ public class SaleRepository {
     public List<SaleItem> findItemsBySaleId(Connection conn, long saleId) throws SQLException {
         Objects.requireNonNull(conn, "Connection cannot be null");
         String sql = "SELECT id, sale_id, variant_id, quantity_scaled, unit_price_paise, " +
-                "line_discount_paise, line_total_paise FROM sale_items WHERE sale_id = ? ORDER BY id ASC;";
+                "line_discount_paise, line_total_paise, hsn_code, gst_rate, cgst_rate, sgst_rate, igst_rate, cgst_paise, sgst_paise, igst_paise " +
+                "FROM sale_items WHERE sale_id = ? ORDER BY id ASC;";
 
         List<SaleItem> items = new ArrayList<>();
         try (PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setLong(1, saleId);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
+                    String hsn = rs.getString("hsn_code");
+                    double gstRate = rs.getDouble("gst_rate");
+                    Double gstVal = rs.wasNull() ? 18.0 : gstRate;
                     items.add(new SaleItem(
                             rs.getLong("id"),
                             rs.getLong("sale_id"),
@@ -172,7 +201,15 @@ public class SaleRepository {
                             Quantity.ofScaled(rs.getLong("quantity_scaled")),
                             Money.ofPaise(rs.getLong("unit_price_paise")),
                             Money.ofPaise(rs.getLong("line_discount_paise")),
-                            Money.ofPaise(rs.getLong("line_total_paise"))
+                            Money.ofPaise(rs.getLong("line_total_paise")),
+                            hsn,
+                            gstVal,
+                            rs.getDouble("cgst_rate"),
+                            rs.getDouble("sgst_rate"),
+                            rs.getDouble("igst_rate"),
+                            rs.getLong("cgst_paise"),
+                            rs.getLong("sgst_paise"),
+                            rs.getLong("igst_paise")
                     ));
                 }
             }

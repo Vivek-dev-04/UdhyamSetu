@@ -204,9 +204,47 @@ public class GenerateBillService {
             Sale savedSale = saleRepository.insertSale(conn, saleToInsert);
             long saleId = savedSale.id();
 
-            // 8. Insert line items and deduct stock
+            // 8. Insert line items and deduct stock with Section 13 Invoice Safety & Statutory Tax Breakdown
+            String shopStateCode = settingsRepository.getSettingOrDefault(conn, "SHOP_STATE_CODE", "08");
+            String custStateCode = "08";
+            if (customerId != null) {
+                custStateCode = customerRepository.findById(conn, customerId)
+                        .map(c -> c.getStateCode() != null ? c.getStateCode() : "08")
+                        .orElse("08");
+            }
+            boolean allowUnverified = Boolean.parseBoolean(
+                    settingsRepository.getSettingOrDefault(conn, "ALLOW_UNVERIFIED_HSN_ON_INVOICE", "true")
+            );
+
             List<SaleItem> savedItems = new ArrayList<>();
             for (SaleItemInput input : items) {
+                ProductVariant variant = variantRepository.findById(conn, input.variantId())
+                        .orElseThrow(() -> new EntityNotFoundException("ProductVariant id=" + input.variantId() + " not found"));
+                Product product = productRepository.findById(conn, variant.productId())
+                        .orElseThrow(() -> new EntityNotFoundException("Product id=" + variant.productId() + " not found"));
+
+                if (!allowUnverified && (product.hsnCode() == null || product.hsnCode().isBlank())) {
+                    throw new ValidationException(String.format(
+                            "Cannot generate tax invoice: Product '%s' lacks an approved HSN classification. Statutory GST compliance requires verified HSN or authorized override.",
+                            product.name()
+                    ));
+                }
+
+                String hsnCode = (product.hsnCode() != null && !product.hsnCode().isBlank()) ? product.hsnCode() : "85446020";
+                double gstRate = product.gstRate() != null ? product.gstRate() : 18.0;
+
+                long lineTotalPaise = input.calculateLineTotal().getPaise();
+                long taxablePaise = Math.round(lineTotalPaise / (1.0 + (gstRate / 100.0)));
+
+                boolean isInterState = !shopStateCode.equalsIgnoreCase(custStateCode);
+                double cgstRate = isInterState ? 0.0 : (gstRate / 2.0);
+                double sgstRate = isInterState ? 0.0 : (gstRate / 2.0);
+                double igstRate = isInterState ? gstRate : 0.0;
+
+                long cgstPaise = isInterState ? 0L : Math.round(taxablePaise * (cgstRate / 100.0));
+                long sgstPaise = isInterState ? 0L : Math.round(taxablePaise * (sgstRate / 100.0));
+                long igstPaise = isInterState ? Math.round(taxablePaise * (igstRate / 100.0)) : 0L;
+
                 SaleItem itemToInsert = new SaleItem(
                         null,
                         saleId,
@@ -214,7 +252,15 @@ public class GenerateBillService {
                         input.quantity(),
                         input.unitPrice(),
                         input.lineDiscount(),
-                        input.calculateLineTotal()
+                        input.calculateLineTotal(),
+                        hsnCode,
+                        gstRate,
+                        cgstRate,
+                        sgstRate,
+                        igstRate,
+                        cgstPaise,
+                        sgstPaise,
+                        igstPaise
                 );
                 SaleItem savedItem = saleRepository.insertSaleItem(conn, itemToInsert);
                 savedItems.add(savedItem);

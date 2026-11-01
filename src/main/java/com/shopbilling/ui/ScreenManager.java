@@ -35,7 +35,7 @@ public class ScreenManager {
 
     public void showHome() {
         HomeScreen screen = new HomeScreen(this);
-        setScene(screen.getView(), 1024, 700, "UdhyamSetu - Electrical Shop Billing System");
+        setScene(screen.getView(), 1100, 750, "UdhyamSetu - Electrical Shop Billing System");
     }
 
     public void showBilling(SaleMode mode) {
@@ -49,8 +49,26 @@ public class ScreenManager {
     }
 
     public void showStock() {
-        StockScreen screen = new StockScreen(this);
-        setScene(screen.getView(), 1050, 720, "UdhyamSetu - Stock & Purchases");
+        showStock(0, false);
+    }
+
+    public void showStock(int initialTabIndex) {
+        showStock(initialTabIndex, false);
+    }
+
+    public void showStock(int initialTabIndex, boolean openStockInImmediately) {
+        StockScreen screen = new StockScreen(this, initialTabIndex, openStockInImmediately);
+        setScene(screen.getView(), 1100, 750, "UdhyamSetu - Stock & Purchases");
+    }
+
+    public void showCustomerDues() {
+        CreditLedgerScreen screen = new CreditLedgerScreen(this, CreditLedgerScreen.Mode.CUSTOMER_ONLY);
+        setScene(screen.getView(), 1080, 720, "UdhyamSetu - Customer Receivables & Aging");
+    }
+
+    public void showSupplierPayables() {
+        CreditLedgerScreen screen = new CreditLedgerScreen(this, CreditLedgerScreen.Mode.SUPPLIER_ONLY);
+        setScene(screen.getView(), 1080, 720, "UdhyamSetu - Supplier Payables & Distributor Ledgers");
     }
 
     public void showCreditLedger() {
@@ -58,13 +76,39 @@ public class ScreenManager {
     }
 
     public void showCreditLedger(int initialTabIndex) {
-        CreditLedgerScreen screen = new CreditLedgerScreen(this, initialTabIndex);
-        setScene(screen.getView(), 1050, 720, "UdhyamSetu - Customer & Supplier Ledgers");
+        CreditLedgerScreen.Mode mode = (initialTabIndex == 1)
+                ? CreditLedgerScreen.Mode.SUPPLIER_ONLY
+                : CreditLedgerScreen.Mode.CUSTOMER_ONLY;
+        CreditLedgerScreen screen = new CreditLedgerScreen(this, mode, initialTabIndex);
+        String title = (mode == CreditLedgerScreen.Mode.SUPPLIER_ONLY)
+                ? "UdhyamSetu - Supplier Payables & Distributor Ledgers"
+                : "UdhyamSetu - Customer Receivables & Aging";
+        setScene(screen.getView(), 1080, 720, title);
+    }
+
+    public void showExpenses() {
+        ExpenseAndClosingScreen screen = new ExpenseAndClosingScreen(this, ExpenseAndClosingScreen.Mode.EXPENSE_ONLY);
+        setScene(screen.getView(), 1050, 720, "UdhyamSetu - Daily Shop Expenses");
+    }
+
+    public void showDayEndClosing() {
+        ExpenseAndClosingScreen screen = new ExpenseAndClosingScreen(this, ExpenseAndClosingScreen.Mode.CLOSING_ONLY);
+        setScene(screen.getView(), 1050, 720, "UdhyamSetu - Day-End Cash Closing");
     }
 
     public void showExpensesAndClosing() {
-        ExpenseAndClosingScreen screen = new ExpenseAndClosingScreen(this);
-        setScene(screen.getView(), 1050, 720, "UdhyamSetu - Expenses & Day-End Closing");
+        showExpensesAndClosing(0);
+    }
+
+    public void showExpensesAndClosing(int initialTabIndex) {
+        ExpenseAndClosingScreen.Mode mode = (initialTabIndex == 1)
+                ? ExpenseAndClosingScreen.Mode.CLOSING_ONLY
+                : ExpenseAndClosingScreen.Mode.EXPENSE_ONLY;
+        ExpenseAndClosingScreen screen = new ExpenseAndClosingScreen(this, mode, initialTabIndex);
+        String title = (mode == ExpenseAndClosingScreen.Mode.CLOSING_ONLY)
+                ? "UdhyamSetu - Day-End Cash Closing"
+                : "UdhyamSetu - Daily Shop Expenses";
+        setScene(screen.getView(), 1050, 720, title);
     }
 
     public void showReportsAndProfit() {
@@ -75,6 +119,11 @@ public class ScreenManager {
     public void showSettingsAndAdmin() {
         SettingsAndAdminScreen screen = new SettingsAndAdminScreen(this);
         setScene(screen.getView(), 1050, 720, "UdhyamSetu - Settings & Admin");
+    }
+
+    public void showHsnManagement() {
+        HsnManagementScreen screen = new HsnManagementScreen(this);
+        setScene(screen.getView(), 1100, 750, "UdhyamSetu - GST HSN Master Directory Management");
     }
 
     private void setScene(Parent root, double width, double height, String title) {

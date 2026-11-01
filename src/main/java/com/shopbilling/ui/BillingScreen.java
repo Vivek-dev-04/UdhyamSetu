@@ -260,7 +260,14 @@ public class BillingScreen {
             }
         });
 
-        tableView.getColumns().addAll(colSno, colItem, colQty, colRate, colDisc, colTotal, colAction);
+        TableColumn<CartLineItem, String> colHsn = new TableColumn<>("HSN/SAC");
+        colHsn.setCellValueFactory(data -> new SimpleStringProperty(
+                data.getValue().hsnCode() != null ? data.getValue().hsnCode() : "-"
+        ));
+        colHsn.setPrefWidth(90);
+        colHsn.setStyle("-fx-alignment: CENTER;");
+
+        tableView.getColumns().addAll(colSno, colItem, colHsn, colQty, colRate, colDisc, colTotal, colAction);
         centerBox.getChildren().addAll(entryGrid, tableView);
         root.setCenter(centerBox);
 
@@ -330,7 +337,8 @@ public class BillingScreen {
                     qty,
                     rate,
                     disc,
-                    lineTotal
+                    lineTotal,
+                    selected.product().hsnCode()
             ));
 
             // Reset inputs
@@ -997,8 +1005,13 @@ public class BillingScreen {
             Quantity quantity,
             Money unitPrice,
             Money lineDiscount,
-            Money lineTotal
-    ) {}
+            Money lineTotal,
+            String hsnCode
+    ) {
+        public CartLineItem(long variantId, String displayName, String unitCode, Quantity quantity, Money unitPrice, Money lineDiscount, Money lineTotal) {
+            this(variantId, displayName, unitCode, quantity, unitPrice, lineDiscount, lineTotal, null);
+        }
+    }
 
     public record ProductVariantWithInfo(
             Product product,
